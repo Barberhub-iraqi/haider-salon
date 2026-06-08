@@ -403,7 +403,6 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
 
       <div class="scard" style="border-color:rgba(107,32,32,0.3)">
         <div class="stitle" style="color:#EF5350">⚠️ منطقة الخطر</div>
-        <button onclick="clearPastToday()" style="width:100%;padding:11px;margin-bottom:8px;background:rgba(107,32,32,0.12);border:1px solid rgba(107,32,32,0.35);border-radius:8px;color:#EF5350;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">🕐 مسح حجوزات اليوم المنتهية</button>
         <button onclick="clearAll()" style="width:100%;padding:11px;background:rgba(107,32,32,0.12);border:1px solid rgba(107,32,32,0.35);border-radius:8px;color:#EF5350;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">🗑️ مسح كل الحجوزات</button>
       </div>
     </div>
@@ -671,32 +670,6 @@ async function clearAll(){
   try{await save();render();toast('✅ تم المسح + تحميل نسخة احتياطية');}
   catch{data.bookings=bk;toast('❌ فشل');}
 }
-
-async function clearPastToday(){
-  const t=todayK();const now=new Date();
-  // الحجوزات اللي وقتها انتهى اليوم
-  const pastToday=data.bookings.filter(b=>{
-    if(b.cancelled||b.dateKey!==t)return false;
-    const h=SH[b.slot];
-    if(h===undefined)return false;
-    const isMidnight=b.slot&&b.slot.includes('ص')&&h<12;
-    const slotTime=new Date(t+'T00:00:00');
-    if(isMidnight)slotTime.setDate(slotTime.getDate()+1);
-    const hFloor=Math.floor(h);const mins=h%1!==0?30:0;
-    slotTime.setHours(hFloor,mins,0,0);
-    return now>=slotTime;
-  });
-  if(!pastToday.length){toast('ما في حجوزات منتهية اليوم');return;}
-  if(!confirm(`سيتم مسح ${pastToday.length} حجز منتهي من اليوم. تكمل؟`))return;
-  const bk=[...data.bookings];
-  // أرشفة قبل المسح
-  if(!data.archivedBookings)data.archivedBookings=[];
-  pastToday.forEach(b=>{if(!data.archivedBookings.find(a=>a.id===b.id))data.archivedBookings.push({...b,autoArchived:true,completedAt:b.completedAt||Date.now()});});
-  data.bookings=data.bookings.filter(b=>!pastToday.find(r=>r.id===b.id));
-  try{await save();render();toast(`✅ تم مسح ${pastToday.length} حجز منتهي`);}
-  catch{data.bookings=bk;data.archivedBookings=data.archivedBookings.filter(a=>!pastToday.find(r=>r.id===a.id));toast('❌ فشل');}
-}
-window.clearPastToday=clearPastToday;
 
 
 function renderStats(){
