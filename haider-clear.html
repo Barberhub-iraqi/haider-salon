@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>مسح حجوزات حيدر</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',sans-serif;background:#0a0a0a;color:#f0e8d0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.card{background:#141410;border:1px solid #2e2e1e;border-radius:16px;padding:30px;max-width:400px;width:100%;text-align:center;}
+h1{font-size:20px;color:#C9A84C;margin-bottom:8px;}
+p{font-size:13px;color:#706858;margin-bottom:24px;}
+.btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;transition:.2s;}
+.btn-danger{background:linear-gradient(135deg,#8B0000,#c0392b);color:#fff;}
+.btn-danger:hover{opacity:.85;}
+.btn-archive{background:linear-gradient(135deg,#2c5282,#3182ce);color:#fff;}
+.btn-archive:hover{opacity:.85;}
+.btn-all{background:linear-gradient(135deg,#4a1a1a,#8B0000);color:#fff;border:1px solid #c0392b;}
+.btn-all:hover{opacity:.85;}
+.status{margin-top:16px;padding:12px;border-radius:10px;font-size:13px;display:none;}
+.status.ok{background:rgba(46,160,67,0.15);border:1px solid rgba(46,160,67,0.3);color:#3fb950;}
+.status.err{background:rgba(192,57,43,0.15);border:1px solid rgba(192,57,43,0.3);color:#e74c3c;}
+.status.loading{background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.2);color:#C9A84C;}
+.divider{border:none;border-top:1px solid #2e2e1e;margin:16px 0;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🗑️ مسح حجوزات حيدر</h1>
+  <p>اختر ماذا تريد تمسح من Firebase مباشرة</p>
+
+  <button class="btn btn-danger" onclick="clearBookings()">مسح الحجوزات النشطة فقط</button>
+  <button class="btn btn-archive" onclick="clearArchive()">مسح الأرشيف فقط</button>
+  <hr class="divider"/>
+  <button class="btn btn-all" onclick="clearAll()">⚠️ مسح كل شي (نشط + أرشيف + انتظار)</button>
+
+  <div class="status" id="status"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const _app = initializeApp({
+  apiKey:"AIzaSyCZp9umWTLmTqbllsE-Oi_zFgwwsD4nbVY",
+  authDomain:"sunshave-haider.firebaseapp.com",
+  projectId:"sunshave-haider",
+  storageBucket:"sunshave-haider.firebasestorage.app",
+  messagingSenderId:"1035946760977",
+  appId:"1:1035946760977:web:4693fde0e74e748dd94ab0"
+});
+const _db = getFirestore(_app);
+const DB = doc(_db, "shams", "data");
+
+function showStatus(msg, type) {
+  const s = document.getElementById('status');
+  s.textContent = msg;
+  s.className = 'status ' + type;
+  s.style.display = 'block';
+}
+
+async function clearBookings() {
+  if(!confirm('مسح الحجوزات النشطة؟')) return;
+  showStatus('جاري المسح...', 'loading');
+  try {
+    const snap = await getDoc(DB);
+    if(!snap.exists()) { showStatus('❌ ما في بيانات', 'err'); return; }
+    const r = snap.data();
+    await setDoc(DB, { ...r, bookings: '[]' });
+    showStatus('✅ تم مسح الحجوزات النشطة', 'ok');
+  } catch(e) { showStatus('❌ فشل: ' + e.message, 'err'); }
+}
+
+async function clearArchive() {
+  if(!confirm('مسح الأرشيف؟')) return;
+  showStatus('جاري المسح...', 'loading');
+  try {
+    const snap = await getDoc(DB);
+    if(!snap.exists()) { showStatus('❌ ما في بيانات', 'err'); return; }
+    const r = snap.data();
+    await setDoc(DB, { ...r, archivedBookings: '[]' });
+    showStatus('✅ تم مسح الأرشيف', 'ok');
+  } catch(e) { showStatus('❌ فشل: ' + e.message, 'err'); }
+}
+
+async function clearAll() {
+  if(!confirm('⚠️ تحذير: سيتم مسح كل الحجوزات والأرشيف وقائمة الانتظار!\nهذا لا يمكن التراجع عنه.')) return;
+  const code = prompt('اكتب "مسح" للتأكيد:');
+  if(code !== 'مسح') { showStatus('❌ تم الإلغاء', 'err'); return; }
+  showStatus('جاري المسح...', 'loading');
+  try {
+    const snap = await getDoc(DB);
+    if(!snap.exists()) { showStatus('❌ ما في بيانات', 'err'); return; }
+    const r = snap.data();
+    await setDoc(DB, { ...r, bookings: '[]', archivedBookings: '[]', waitlist: '[]' });
+    showStatus('✅ تم مسح كل شي بنجاح', 'ok');
+  } catch(e) { showStatus('❌ فشل: ' + e.message, 'err'); }
+}
+
+window.clearBookings = clearBookings;
+window.clearArchive = clearArchive;
+window.clearAll = clearAll;
+</script>
+</body>
+</html>
