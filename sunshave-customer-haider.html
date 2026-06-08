@@ -562,7 +562,7 @@ function selDur(){
   return selSvc?getSvcDuration(selSvc):30;
 }
 
-// كل الأوقات التي يشغلها حجز (بناءً على مدته)
+// كل الأوقات التي يشغلها حجز (بناءً على مدته) — لا تتجاوز نهاية ساعات العمل
 function occupiedSlots(b){
   // الشسوار ما يشغل الوقت — يحجز بدون ما يمنع الآخرين
   if(isShiswarSvc(b.serviceId))return[];
@@ -571,6 +571,7 @@ function occupiedSlots(b){
   const allS=slots();
   const si=allS.indexOf(b.slot);
   if(si<0)return[b.slot];
+  // لا نتجاوز آخر وقت في ساعات العمل
   return allS.slice(si,Math.min(si+count,allS.length));
 }
 
@@ -598,14 +599,14 @@ function canBook(dk,startSlot){
   if(!needed.every(s=>!isBooked(dk,s)))return false;
   // تحقق إن الوقت الجديد ما يتداخل مع بداية حجز قائم
   // (مثلاً: حجز ساعة كاملة لا يبدأ في وسط خدمة قائمة مدتها نص ساعة)
-  const newEnd=si+count;
+  const newEnd=Math.min(si+count,allS.length);
   const conflict=db.bookings.some(b=>{
     if(b.dateKey!==dk||b.cancelled)return false;
     const bi=allS.indexOf(b.slot);
     if(bi<0)return false;
     const bdur=getBookingDuration(b);
     const bcount=Math.max(1,Math.ceil(bdur/30));
-    const bEnd=bi+bcount;
+    const bEnd=Math.min(bi+bcount,allS.length);
     // تداخل: نطاق الجديد يتقاطع مع نطاق القائم
     return si<bEnd&&newEnd>bi;
   });

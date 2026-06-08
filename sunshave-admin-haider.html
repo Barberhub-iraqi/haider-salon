@@ -851,7 +851,7 @@ function isSlotConflict(dateKey,startSlot,serviceId,excludeId){
   const svc=svcs.find(s=>s.id===serviceId||s.name===serviceId);
   const dur=svc&&svc.duration?svc.duration:30;
   const count=Math.max(1,Math.ceil(dur/30));
-  const newEnd=si+count;
+  const newEnd=Math.min(si+count,allS.length);
   return data.bookings.some(b=>{
     if(b.dateKey!==dateKey||b.cancelled)return false;
     if(excludeId&&b.id===excludeId)return false;
@@ -859,7 +859,7 @@ function isSlotConflict(dateKey,startSlot,serviceId,excludeId){
     if(bi<0)return false;
     const bdur=getSvcDuration(b.serviceId||b.service);
     const bcount=Math.max(1,Math.ceil(bdur/30));
-    const bEnd=bi+bcount;
+    const bEnd=Math.min(bi+bcount,allS.length);
     return si<bEnd&&newEnd>bi;
   });
 }
@@ -969,7 +969,9 @@ function updateMSlots(){
     // تحقق إذا أي slot من السلوتات المطلوبة للحجز الجديد محجوز
     let conflict=false;
     for(let x=0;x<newDurSlots;x++){
-      if(si+x>=allS.length||occupiedSlots.has(allS[si+x])){conflict=true;break;}
+      const idx=si+x;
+      if(idx>=allS.length)break;// لا نتجاوز نهاية ساعات العمل
+      if(occupiedSlots.has(allS[idx])){conflict=true;break;}
     }
     const opt=document.createElement('option');
     opt.value=s;
