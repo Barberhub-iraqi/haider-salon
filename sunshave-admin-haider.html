@@ -662,16 +662,17 @@ async function markDone(id){const b=data.bookings.find(x=>x.id===id);if(!b)retur
 async function saveNote(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const inp=document.getElementById('note_'+id);if(!inp)return;b.note=inp.value.trim();await save();toast('💾 تم حفظ الملاحظة');}
 function sendWait(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const w=waitInfo(id);if(!w){toast('هذا الحجز مو اليوم');return;}const msg=w.before===0?`السلام عليكم ${b.name} 👋\n\n✂️ دورك الحين في Sun Shave!\n\nتفضل مباشرة ☀️`:`السلام عليكم ${b.name} 👋\n\n⏳ وقت انتظارك التقديري:\n👤 في قبلك: ${w.before} زبون\n⏱️ ~${w.mins} دقيقة\n\nSun Shave ☀️`;openWA(b.phone,msg);toast(`📲 أُرسل لـ ${b.name}`);}
 async function clearAll(){
-  if(!confirm('تحذير: سيتم مسح كل الحجوزات النشطة!\nسيتم تحميل نسخة احتياطية تلقائياً قبل المسح.'))return;
+  if(!confirm('تحذير: سيتم مسح كل الحجوزات النشطة والأرشيف وقائمة الانتظار!\nسيتم تحميل نسخة احتياطية تلقائياً قبل المسح.'))return;
   const code=prompt('اكتب "مسح" للتأكيد:');
   if(code!=='مسح'){toast('❌ تم الإلغاء');return;}
   // تحميل backup تلقائي
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   a.href=url;a.download=`sunshave_backup_${todayK()}.json`;a.click();URL.revokeObjectURL(url);
-  const bk=[...data.bookings];data.bookings=[];
-  try{await save();render();toast('✅ تم المسح + تحميل نسخة احتياطية');}
-  catch{data.bookings=bk;toast('❌ فشل');}
+  const bk={bookings:[...data.bookings],archivedBookings:[...(data.archivedBookings||[])],waitlist:[...(data.waitlist||[])]};
+  data.bookings=[];data.archivedBookings=[];data.waitlist=[];
+  try{await save();render();toast('✅ تم مسح كل شي + تحميل نسخة احتياطية');}
+  catch{data.bookings=bk.bookings;data.archivedBookings=bk.archivedBookings;data.waitlist=bk.waitlist;toast('❌ فشل');}
 }
 
 
