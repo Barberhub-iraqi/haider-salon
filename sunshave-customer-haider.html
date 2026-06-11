@@ -389,19 +389,19 @@ const _app = initializeApp({
 const _db = getFirestore(_app);
 const DB = doc(_db, "shams", "data");
 
-const ALL_SLOTS = ["12:00 م","12:30 م","1:00 م","1:30 م","2:00 م","2:30 م","3:00 م","3:30 م","4:00 م","4:30 م","5:00 م","5:30 م","6:00 م","6:30 م","7:00 م","7:30 م","8:00 م","8:30 م","9:00 م","9:30 م","10:00 م","10:30 م","11:00 م","11:30 م","12:00 ص","12:30 ص","1:00 ص","1:30 ص","2:00 ص","2:30 ص","3:00 ص","3:30 ص","4:00 ص","4:30 ص","5:00 ص","5:30 ص","6:00 ص","6:30 ص","7:00 ص","7:30 ص","8:00 ص","8:30 ص","9:00 ص","9:30 ص","10:00 ص","10:30 ص","11:00 ص","11:30 ص"];
-const SLOT_H = {"12:00 م":12,"12:30 م":12.5,"1:00 م":13,"1:30 م":13.5,"2:00 م":14,"2:30 م":14.5,"3:00 م":15,"3:30 م":15.5,"4:00 م":16,"4:30 م":16.5,"5:00 م":17,"5:30 م":17.5,"6:00 م":18,"6:30 م":18.5,"7:00 م":19,"7:30 م":19.5,"8:00 م":20,"8:30 م":20.5,"9:00 م":21,"9:30 م":21.5,"10:00 م":22,"10:30 م":22.5,"11:00 م":23,"11:30 م":23.5,"12:00 ص":0,"12:30 ص":0.5,"1:00 ص":1,"1:30 ص":1.5,"2:00 ص":2,"2:30 ص":2.5,"3:00 ص":3,"3:30 ص":3.5,"4:00 ص":4,"4:30 ص":4.5,"5:00 ص":5,"5:30 ص":5.5,"6:00 ص":6,"6:30 ص":6.5,"7:00 ص":7,"7:30 ص":7.5,"8:00 ص":8,"8:30 ص":8.5,"9:00 ص":9,"9:30 ص":9.5,"10:00 ص":10,"10:30 ص":10.5,"11:00 ص":11,"11:30 ص":11.5};
+const ALL_SLOTS = ["12:00 م","1:00 م","2:00 م","3:00 م","4:00 م","5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م","12:00 ص","1:00 ص","2:00 ص","3:00 ص","4:00 ص","5:00 ص","6:00 ص","7:00 ص","8:00 ص","9:00 ص","10:00 ص","11:00 ص"];
+const SLOT_H = {"12:00 م":12,"1:00 م":13,"2:00 م":14,"3:00 م":15,"4:00 م":16,"5:00 م":17,"6:00 م":18,"7:00 م":19,"8:00 م":20,"9:00 م":21,"10:00 م":22,"11:00 م":23,"12:00 ص":0,"1:00 ص":1,"2:00 ص":2,"3:00 ص":3,"4:00 ص":4,"5:00 ص":5,"6:00 ص":6,"7:00 ص":7,"8:00 ص":8,"9:00 ص":9,"10:00 ص":10,"11:00 ص":11};
 const DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 const MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const NTFY_TOPIC='sunshave-haider-2026';
 const DEFAULT_SVCS = [
-  {id:'svc1', name:'حلاقة كاملة', price:20000, icon:'✂️'},
-  {id:'svc2',name:'تحديد ولحية', price:10000, icon:'🪒'},
-  {id:'svc3',name:'شسوار',        price:5000,  icon:'💧'},
-  {id:'svc4',name:'طفل',          price:10000, icon:'👦'},
-  {id:'svc5',name:'تنظيف بشرة عميق', price:15000, icon:'🧴'},
-  {id:'svc6',name:'تنظيف بشرة عادي', price:8000, icon:'🫧'},
-  {id:'svc7',name:'صبي',           price:7500,  icon:'🧒'},
+  {id:'svc1', name:'حلاقة كاملة',     price:20000, icon:'✂️', duration:60},
+  {id:'svc2', name:'تحديد ولحية',     price:10000, icon:'🪒', duration:30},
+  {id:'svc3', name:'شسوار',           price:5000,  icon:'💧', duration:15},
+  {id:'svc4', name:'طفل',             price:10000, icon:'👦', duration:15},
+  {id:'svc5', name:'تنظيف بشرة عميق',price:15000, icon:'🧴', duration:45},
+  {id:'svc6', name:'تنظيف بشرة عادي',price:8000,  icon:'🫧', duration:30},
+  {id:'svc7', name:'صبي',             price:7500,  icon:'🧒', duration:30},
 ];
 let SVCS = [...DEFAULT_SVCS];
 
@@ -427,7 +427,7 @@ function getBoysSvc(){return SVCS.find(s=>s.name&&s.name.includes('صبي'))||nu
 function getBoysSvcId(){const s=getBoysSvc();return s?s.id:null;}
 function isBoysSvc(id){const svc=SVCS.find(s=>s.id===id);return !!(svc&&svc.name&&svc.name.includes('صبي'));}
 function boysUnitPrice(){const svc=getBoysSvc();return svc?Number(svc.price):10000;}
-function isShiswarSvc(id){const svc=SVCS.find(s=>s.id===id);return !!(svc&&svc.name&&svc.name.includes('شسوار'));}
+function isShiswarSvc(id){if(id==='svc3')return true;const svc=SVCS.find(s=>s.id===id);return !!(svc&&(svc.name&&(svc.name.includes('شسوار')||svc.name.includes('تنظيف بشرة'))));}
 
 
 function openKidsModal(){
@@ -562,19 +562,31 @@ function selDur(){
   return selSvc?getSvcDuration(selSvc):30;
 }
 
-// كل الأوقات التي يشغلها حجز (بناءً على مدته)
+// كل الأوقات التي يشغلها حجز — كل حجز يشغل وقت واحد فقط (ساعة واحدة)
+// الاستثناء: الأطفال والصبيان قد يشغلون أكثر حسب العدد
 function occupiedSlots(b){
   // الشسوار ما يشغل الوقت — يحجز بدون ما يمنع الآخرين
   if(isShiswarSvc(b.serviceId))return[];
-  const dur=getBookingDuration(b);
-  const count=Math.max(1,Math.ceil(dur/30));
-  const allS=slots();
-  const si=allS.indexOf(b.slot);
-  if(si<0)return[b.slot];
-  return allS.slice(si,Math.min(si+count,allS.length));
+  // الأطفال والصبيان: حساب عدد الأوقات (كل طفل 15د = ربع ساعة، لكن الوحدة ساعة)
+  if((b.kidsCount||0)>0&&isKidsSvc(b.serviceId)){
+    const dur=Number(b.kidsCount)*KIDS_DUR_PER;
+    const count=Math.max(1,Math.ceil(dur/60));
+    const allS=slots();const si=allS.indexOf(b.slot);
+    if(si<0)return[b.slot];
+    return allS.slice(si,Math.min(si+count,allS.length));
+  }
+  if((b.boysCount||0)>0&&isBoysSvc(b.serviceId)){
+    const dur=Number(b.boysCount)*BOYS_DUR_PER;
+    const count=Math.max(1,Math.ceil(dur/60));
+    const allS=slots();const si=allS.indexOf(b.slot);
+    if(si<0)return[b.slot];
+    return allS.slice(si,Math.min(si+count,allS.length));
+  }
+  // باقي الخدمات = وقت واحد فقط
+  return[b.slot];
 }
 
-// هل وقت معين محجوز (مع مراعاة مدة الخدمات الأخرى)
+// هل وقت معين محجوز
 function isBooked(dk,s){
   return db.bookings.some(b=>{
     if(b.dateKey!==dk||b.cancelled)return false;
@@ -582,43 +594,26 @@ function isBooked(dk,s){
   });
 }
 
-// هل يمكن حجز وقت معين للخدمة المختارة (أوقات كافية متتالية)
+// هل يمكن حجز وقت معين — بدون حجب الأوقات المجاورة
 function canBook(dk,startSlot){
   // الشسوار مفتوح بأي وقت حتى لو محجوز
   if(isShiswarSvc(selSvc))return !isPast(dk,startSlot);
-  const dur=selDur();
-  const count=Math.max(1,Math.ceil(dur/30));
+  if(isPast(dk,startSlot))return false;
+  // للأطفال والصبيان: تحقق من الأوقات المطلوبة فقط
   const allS=slots();
   const si=allS.indexOf(startSlot);
   if(si<0)return false;
-  if(isPast(dk,startSlot))return false;
-  // الأوقات التي تحتاجها الخدمة الجديدة
+  let count=1;
+  if(isKidsSvc(selSvc)&&kidsOverrideDuration){count=Math.max(1,Math.ceil(kidsOverrideDuration/60));}
+  else if(isBoysSvc(selSvc)&&boysOverrideDuration){count=Math.max(1,Math.ceil(boysOverrideDuration/60));}
   const needed=allS.slice(si,Math.min(si+count,allS.length));
-  // تحقق إن كل وقت مطلوب فاضي (مش محجوز من خدمة سابقة)
-  if(!needed.every(s=>!isBooked(dk,s)))return false;
-  // تحقق إن الوقت الجديد ما يتداخل مع بداية حجز قائم
-  // (مثلاً: حجز ساعة كاملة لا يبدأ في وسط خدمة قائمة مدتها نص ساعة)
-  const newEnd=si+count;
-  const conflict=db.bookings.some(b=>{
-    if(b.dateKey!==dk||b.cancelled)return false;
-    const bi=allS.indexOf(b.slot);
-    if(bi<0)return false;
-    const bdur=getBookingDuration(b);
-    const bcount=Math.max(1,Math.ceil(bdur/30));
-    const bEnd=bi+bcount;
-    // تداخل: نطاق الجديد يتقاطع مع نطاق القائم
-    return si<bEnd&&newEnd>bi;
-  });
-  return !conflict;
+  return needed.every(s=>!isBooked(dk,s));
 }
 
 function phoneBooked(p){const np=normPhone(p);return db.bookings.some(b=>!b.cancelled&&normPhone(b.phone||'')===np);}
 function allBooked(dk){
   const av=slots().filter(s=>!isPast(dk,s)&&!isBooked(dk,s));
-  if(av.length===0)return true;
-  // لو ما في ولا وقت يكفي للخدمة المختارة
-  if(selSvc)return!av.some(s=>canBook(dk,s));
-  return false;
+  return av.length===0;
 }
 
 async function load(){
@@ -638,8 +633,11 @@ async function load(){
         if(Array.isArray(loaded)&&loaded.length>0){SVCS=loaded;db.services=loaded;}
         // إضافة صبي تلقائياً إذا ما كانت موجودة في Firebase
         if(!SVCS.find(s=>s.name&&s.name.includes('صبي'))){
-          SVCS.push({id:'svc7',name:'صبي',price:7500,icon:'🧒',duration:15});
+          SVCS.push({id:'svc7',name:'صبي',price:7500,icon:'🧒',duration:30});
         }
+        // ترقية تلقائية: أضف duration للخدمات اللي ما عندها مدة
+        const durMap={'svc1':60,'svc2':30,'svc3':15,'svc4':15,'svc5':45,'svc6':30,'svc7':30};
+        SVCS.forEach(s=>{if(!s.duration)s.duration=durMap[s.id]||60;});
       }
       
     }
@@ -735,16 +733,11 @@ function renderSlots(){
     const past=isPast(selDateKey,s);
     // الشسوار ما يعتبر الوقت محجوز — مفتوح دايماً
     const bkd=isShiswarSvc(selSvc)?false:isBooked(selDateKey,s);
-    // وقت فاضي لكن ما يكفي أوقات بعده للخدمة المختارة
-    const notEnough=!past&&!bkd&&selSvc&&!canBook(selDateKey,s);
     const b=document.createElement('button');
     if(bkd){
       b.className='slot-btn bkd';b.textContent=s;b.disabled=true;
     } else if(past){
       b.className='slot-btn past';b.textContent=s;b.disabled=true;
-    } else if(notEnough){
-      b.className='slot-btn past';b.textContent=s;b.disabled=true;
-      b.title='لا يكفي وقت لهذه الخدمة';
     } else {
       b.className='slot-btn'+(selSlot===s?' sel':'');
       b.textContent=s;
