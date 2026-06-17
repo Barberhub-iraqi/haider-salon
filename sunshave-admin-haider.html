@@ -188,6 +188,17 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
 .svc-price-inp{width:100%;background:var(--black);border:1px solid var(--border2);border-radius:6px;padding:7px 9px;font-family:'Cairo',sans-serif;font-size:13px;color:var(--gold);outline:none;}
 .svc-price-lbl{font-size:9px;color:var(--muted);margin-bottom:2px;}
 
+/* BLOCKED SLOTS */
+.blk-day-sel{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;}
+.blk-day-sel::-webkit-scrollbar{display:none;}
+.blk-day-pill{flex-shrink:0;background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:7px 13px;color:var(--muted);font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.blk-day-pill.active{background:rgba(201,168,76,0.1);border-color:var(--gold);color:var(--gold);}
+.blk-slots-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;}
+.blk-slot{background:var(--card);border:1px solid var(--border2);border-radius:7px;padding:9px 4px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;text-align:center;transition:all .15s;}
+.blk-slot:hover{border-color:rgba(239,83,80,0.4);color:#EF5350;}
+.blk-slot.blocked{background:rgba(107,32,32,0.25);border-color:rgba(239,83,80,0.5);color:#EF5350;}
+.blk-slot.booked{opacity:.4;cursor:not-allowed;}
+
 /* MISC */
 .empty{text-align:center;padding:40px 0;border:1px dashed var(--border2);border-radius:12px;}
 .empty-icon{font-size:32px;margin-bottom:10px;opacity:.3;}
@@ -261,7 +272,7 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
     <div class="mini-stats">
       <div class="mini-stat"><div class="ms-n" id="st-tot">0</div><div class="ms-l">إجمالي</div></div>
       <div class="mini-stat"><div class="ms-n" id="st-pend">0</div><div class="ms-l">لم يُذكَّر</div></div>
-      <div class="mini-stat"><div class="ms-n" id="st-rem">0</div><div class="ms-l">تم التذكير</div></div>
+      <div class="mini-stat"><div class="ms-n" id="st-rem">0</div><div class="ms-l">تم التأكيد</div></div>
     </div>
     <div class="sec" style="margin-top:14px">
       <div class="sec-hdr">
@@ -394,6 +405,14 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
         <div class="stitle">📅 تعطيل / تفعيل يوم</div>
         <div class="dis-scroll" id="disScroll"></div>
       </div>
+      <!-- BLOCKED SLOTS CARD -->
+      <div class="scard" style="border-color:rgba(239,83,80,0.2)">
+        <div class="stitle" style="color:#EF9090">🚫 حجب ساعات معينة</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">اختار اليوم ثم اضغط على الساعات اللي تريد تحجبها — تظهر للزبائن كـ"محجوزة"</div>
+        <div class="blk-day-sel" id="blkDaySel"></div>
+        <div class="blk-slots-grid" id="blkSlotsGrid"><div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div></div>
+        <div id="blkCount" style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px"></div>
+      </div>
       <div class="scard">
         <div class="stitle">🔒 تغيير رمز الدخول</div>
         <div class="srow"><div class="slbl">الرمز الحالي</div><input class="sinp" id="oldPin" type="password" maxlength="4" placeholder="الرمز الحالي"/></div>
@@ -483,7 +502,7 @@ const SH={"12:00 م":12,"1:00 م":13,"2:00 م":14,"3:00 م":15,"4:00 م":16,"5:0
 const DAYS=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 const MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
-let data={bookings:[],waitlist:[],disabledDays:[],archivedBookings:[],expenses:[],workHours:{start:"5:00 م",end:"11:00 م"},services:[
+let data={bookings:[],waitlist:[],disabledDays:[],blockedSlots:{},archivedBookings:[],expenses:[],workHours:{start:"5:00 م",end:"11:00 م"},services:[
   {id:'svc1',name:'حلاقة كاملة',price:20000,icon:'✂️',duration:60},
   {id:'svc2',name:'تحديد ولحية',price:10000,icon:'🪒',duration:30},
   {id:'svc3',name:'شسوار',price:5000,icon:'💧',duration:15},
@@ -562,6 +581,7 @@ async function load(){
         bookings:typeof r.bookings==='string'?JSON.parse(r.bookings):(r.bookings||[]),
         waitlist:typeof r.waitlist==='string'?JSON.parse(r.waitlist):(r.waitlist||[]),
         disabledDays:typeof r.disabledDays==='string'?JSON.parse(r.disabledDays):(r.disabledDays||[]),
+        blockedSlots:typeof r.blockedSlots==='string'?JSON.parse(r.blockedSlots):(r.blockedSlots||{}),
         archivedBookings:typeof r.archivedBookings==='string'?JSON.parse(r.archivedBookings):(r.archivedBookings||[]),
         expenses:typeof r.expenses==='string'?JSON.parse(r.expenses):(r.expenses||[]),
         workHours:{start:r.workHoursStart||"5:00 م",end:r.workHoursEnd||"11:00 م"},
@@ -579,7 +599,7 @@ async function load(){
   }catch(e){syncBar(false);toast('خطأ في الاتصال');}
 }
 async function save(){
-  await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م"});
+  await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م"});
   lastSync=new Date();syncBar(true);
 }
 function cleanOld(){
@@ -642,7 +662,7 @@ function renderBookings(){
         ${wi?wi.before===0?'<span style="color:#66BB6A">⚡ دوره الآن</span>':`<span style="color:var(--gold)">⏳ قبله ${wi.before} (~${wi.mins}د)</span>`:''}
       </div>
       <div class="acts">
-        <button class="wa-btn" onclick="remind('${b.id}')" ${b.reminded?'disabled':''}>${waI} ${b.reminded?'ذُكِّر':'تذكير'}</button>
+        <button class="wa-btn" onclick="remind('${b.id}')" ${b.reminded?'disabled':''}>${waI} ${b.reminded?'تم التأكيد':'تأكيد'}</button>
         <button class="done-btn" onclick="markDone('${b.id}')">✅ تمت</button>
         <button class="del-btn" onclick="cancelB('${b.id}')">إلغاء</button>
       </div>
@@ -655,10 +675,10 @@ function renderBookings(){
 
 async function remind(id){
   const b=data.bookings.find(x=>x.id===id);if(!b)return;
-  const msg=`السلام عليكم ${b.name} 👋\n\n🔔 تذكير بموعدك في *Sun Shave*\n\n✂️ ${b.service}\n📅 ${b.dateLabel||b.day}\n⏰ ${b.slot}\n💰 ${fp(b.price)}\n\n⚠️ التأخر أكثر من 15 دقيقة يلغي حجزك.\n\nSun Shave ☀️`;
+  const msg=`مرحبا ☺️ ${b.name}\n🔔 تذكير بموعدك في صالون شمس\n⭐️الكوافير : حسين كاظم\n✂️ ${b.service}\n📅 ${b.dateLabel||b.day}\n⏰ ${b.slot}\n💰 ${fp(b.price)}\n🕒 نرجو الالتزام بموعد الحجز، وفي حال التأخر أكثر من 15 دقيقة قد يتم إلغاء الموعد لإتاحة الفرصة للزبائن الآخرين`;
   openWA(b.phone,msg);
   b.reminded=true;
-  try{await save();render();toast(`✅ تذكير لـ ${b.name}`);}
+  try{await save();render();toast(`✅ تأكيد لـ ${b.name}`);}
   catch(e){b.reminded=false;toast('❌ فشل');}
 }
 async function cancelB(id){if(!confirm('إلغاء هذا الحجز؟'))return;const b=data.bookings.find(x=>x.id===id);if(!b)return;const bk=[...data.bookings];data.bookings=data.bookings.filter(x=>x.id!==id);try{await save();render();toast(`🗑️ ألغي موعد ${b.name}`);}catch{data.bookings=bk;toast('❌ فشل');}}
@@ -776,6 +796,8 @@ function renderSettings(){
   const am=document.getElementById('avgMins');if(am)am.value=localStorage.getItem('ss_avg_mins')||'30';
   const g=document.getElementById('disScroll');g.innerHTML='';
   next7().forEach(d=>{const key=dk(d);const off=(data.disabledDays||[]).includes(key);const card=document.createElement('div');card.className='dis-day'+(off?' off':'');card.innerHTML=`<span class="dd-name">${DAYS[d.getDay()]}</span><span class="dd-num">${d.getDate()}</span><span class="dd-month">${MONTHS[d.getMonth()]}</span>`;card.onclick=()=>toggleDay(key);g.appendChild(card);});
+  // render blocked slots day selector
+  renderBlkDaySel();
 }
 
 function addSvc(){
@@ -810,6 +832,65 @@ function updateManualSvcSelect(){
 }
 async function saveHours(){const ws=document.getElementById('wStart');const we=document.getElementById('wEnd');const st=ws.options[ws.selectedIndex].value;const en=we.options[we.selectedIndex].value;data.workHours={start:st,end:en};const am=document.getElementById('avgMins');if(am)localStorage.setItem('ss_avg_mins',am.value);try{await save();toast('✅ تم حفظ الإعدادات');}catch{toast('❌ فشل');}}
 async function toggleDay(key){if(!data.disabledDays)data.disabledDays=[];const was=data.disabledDays.includes(key);if(was)data.disabledDays=data.disabledDays.filter(d=>d!==key);else data.disabledDays.push(key);try{await save();toast(was?'✅ تم تفعيل اليوم':'🚫 تم تعطيل اليوم');renderSettings();}catch{if(was)data.disabledDays.push(key);else data.disabledDays=data.disabledDays.filter(d=>d!==key);}}
+
+// ── Blocked Slots ──
+let blkSelDay=null;
+function renderBlkDaySel(){
+  const g=document.getElementById('blkDaySel');if(!g)return;
+  g.innerHTML='';
+  next7().forEach(d=>{
+    const key=dk(d);
+    const btn=document.createElement('button');
+    btn.className='blk-day-pill'+(blkSelDay===key?' active':'');
+    const cnt=((data.blockedSlots||{})[key]||[]).length;
+    btn.textContent=`${DAYS[d.getDay()]} ${d.getDate()}${cnt?` (${cnt}🚫)`:''}`;
+    btn.onclick=()=>{blkSelDay=key;renderBlkDaySel();renderBlkSlots();};
+    g.appendChild(btn);
+  });
+  renderBlkSlots();
+}
+function renderBlkSlots(){
+  const g=document.getElementById('blkSlotsGrid');if(!g)return;
+  if(!blkSelDay){g.innerHTML='<div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div>';return;}
+  const workSlots=slots();
+  const blocked=(data.blockedSlots||{})[blkSelDay]||[];
+  const bookedSet=new Set(data.bookings.filter(b=>b.dateKey===blkSelDay&&!b.cancelled).flatMap(b=>slotsOccupiedByBooking(b)));
+  g.innerHTML='';
+  workSlots.forEach(s=>{
+    const isBlocked=blocked.includes(s);
+    const isBooked=bookedSet.has(s);
+    const btn=document.createElement('button');
+    btn.className='blk-slot'+(isBlocked?' blocked':'')+(isBooked?' booked':'');
+    btn.textContent=s+(isBooked?'\n📅':'');
+    btn.title=isBooked?'هذا الوقت فيه حجز حقيقي':'';
+    if(!isBooked){
+      btn.onclick=()=>toggleBlkSlot(blkSelDay,s);
+    } else {
+      btn.disabled=true;
+    }
+    g.appendChild(btn);
+  });
+  const cnt=blocked.length;
+  const countEl=document.getElementById('blkCount');
+  if(countEl)countEl.textContent=cnt?`🚫 ${cnt} ساعة محجوبة في هذا اليوم — اضغط عليها مرة ثانية لإلغاء الحجب`:'✅ كل الساعات متاحة في هذا اليوم';
+}
+async function toggleBlkSlot(dateKey,slot){
+  if(!data.blockedSlots)data.blockedSlots={};
+  if(!data.blockedSlots[dateKey])data.blockedSlots[dateKey]=[];
+  const arr=data.blockedSlots[dateKey];
+  const idx=arr.indexOf(slot);
+  if(idx>=0)arr.splice(idx,1);else arr.push(slot);
+  if(!arr.length)delete data.blockedSlots[dateKey];
+  try{
+    await save();
+    renderBlkDaySel();
+    toast(idx>=0?`✅ فُتح وقت ${slot}`:`🚫 حُجب وقت ${slot}`);
+  }catch{
+    if(idx>=0)arr.splice(idx,0,slot);else arr.pop();
+    toast('❌ فشل');
+  }
+}
+window.toggleBlkSlot=toggleBlkSlot;
 
 async function changePIN(){
   const old=document.getElementById('oldPin').value.trim();const nw=document.getElementById('newPin').value.trim();
@@ -999,7 +1080,7 @@ function exportBkp(){const blob=new Blob([JSON.stringify(data,null,2)],{type:'ap
 function sendBulk(){
   const dateKey=selDateKey==='all'?todayK():selDateKey;const db2=data.bookings.filter(b=>!b.cancelled&&b.dateKey===dateKey);
   if(!db2.length){toast('ما في زبائن');return;}
-  const msg=`السلام عليكم\nتذكير بموعدكم في Sun Shave ☀️\nالتأخر أكثر من 15 دقيقة يلغي الحجز.`;
+  const msg=`السلام عليكم\nتأكيد موعدكم في Sun Shave ☀️\nالتأخر أكثر من 15 دقيقة يلغي الحجز.`;
   db2.forEach((b,i)=>{setTimeout(()=>{const c=b.phone.replace(/\D/g,'');window.open(`https://wa.me/${c.startsWith('0')?'964'+c.slice(1):c}?text=${encodeURIComponent(msg)}`,'_blank');},i*800);});
   toast(`📲 فتح ${db2.length} محادثة...`);
 }
@@ -1053,6 +1134,7 @@ window.saveManual=saveManual;window.printToday=printToday;window.exportBkp=expor
 window.sendBulk=sendBulk;window.renderBookings=renderBookings;
 window.saveServices=saveServices;window.updateManualSvcSelect=updateManualSvcSelect;window.addSvc=addSvc;window.delSvc=delSvc;
 window.getP=getP;window.setP=setP;
+window.renderBlkDaySel=renderBlkDaySel;window.renderBlkSlots=renderBlkSlots;
 </script>
 </body>
 </html>
