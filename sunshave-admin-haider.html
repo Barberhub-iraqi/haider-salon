@@ -639,7 +639,7 @@ function renderBookings(){
       </div>
       <div class="cinfo">
         <span>📞 ${b.phone}</span><span>🕐 ${b.bookedAt||''}</span>
-        ${wi?wi.before===0?'<span style="color:#66BB6A">⚡ دوره الحين</span>':`<span style="color:var(--gold)">⏳ قبله ${wi.before} (~${wi.mins}د)</span>`:''}
+        ${wi?wi.before===0?'<span style="color:#66BB6A">⚡ دوره الآن</span>':`<span style="color:var(--gold)">⏳ قبله ${wi.before} (~${wi.mins}د)</span>`:''}
       </div>
       <div class="acts">
         <button class="wa-btn" onclick="remind('${b.id}')" ${b.reminded?'disabled':''}>${waI} ${b.reminded?'ذُكِّر':'تذكير'}</button>
@@ -665,7 +665,7 @@ async function cancelB(id){if(!confirm('إلغاء هذا الحجز؟'))return;
 async function cancelLate(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const m=lateMin(b);const bk=[...data.bookings];data.bookings=data.bookings.filter(x=>x.id!==id);try{await save();render();toast(`⛔ ألغي حجز ${b.name} — تأخر ${m} دقيقة`);}catch{data.bookings=bk;toast('❌ فشل');}}
 async function markDone(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;if(!confirm(`تأكيد انتهاء خدمة ${b.name}؟`))return;data.bookings=data.bookings.filter(x=>x.id!==id);if(!data.archivedBookings)data.archivedBookings=[];data.archivedBookings.push({...b,completedAt:Date.now(),status:'done'});try{await save();render();toast(`✅ تمت خدمة ${b.name}`);}catch{data.bookings.push(b);data.archivedBookings.pop();toast('❌ فشل');}}
 async function saveNote(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const inp=document.getElementById('note_'+id);if(!inp)return;b.note=inp.value.trim();await save();toast('💾 تم حفظ الملاحظة');}
-function sendWait(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const w=waitInfo(id);if(!w){toast('هذا الحجز مو اليوم');return;}const msg=w.before===0?`السلام عليكم ${b.name} 👋\n\n✂️ دورك الحين في Sun Shave!\n\nتفضل مباشرة ☀️`:`السلام عليكم ${b.name} 👋\n\n⏳ وقت انتظارك التقديري:\n👤 في قبلك: ${w.before} زبون\n⏱️ ~${w.mins} دقيقة\n\nSun Shave ☀️`;openWA(b.phone,msg);toast(`📲 أُرسل لـ ${b.name}`);}
+function sendWait(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const w=waitInfo(id);if(!w){toast('هذا الحجز مو اليوم');return;}const msg=w.before===0?`السلام عليكم ${b.name} 👋\n\n✂️ دورك الآن في Sun Shave!\n\nتفضل مباشرة ☀️`:`السلام عليكم ${b.name} 👋\n\n⏳ وقت انتظارك التقديري:\n👤 في قبلك: ${w.before} زبون\n⏱️ ~${w.mins} دقيقة\n\nSun Shave ☀️`;openWA(b.phone,msg);toast(`📲 أُرسل لـ ${b.name}`);}
 async function clearAll(){
   if(!confirm('تحذير: سيتم مسح كل الحجوزات النشطة!\nسيتم تحميل نسخة احتياطية تلقائياً قبل المسح.'))return;
   const code=prompt('اكتب "مسح" للتأكيد:');
@@ -738,7 +738,7 @@ function renderWaitlist(){
   const list=document.getElementById('waitCards');if(!data.waitlist||!data.waitlist.length){list.innerHTML=`<div class="empty"><div class="empty-icon">⏳</div><p>القائمة فارغة</p></div>`;return;}
   list.innerHTML=data.waitlist.map(w=>`<div class="wait-card"><div><div class="wait-name">${w.name}</div><div class="wait-detail">📞 ${w.phone} • 📅 ${w.day}</div></div><button class="notif-btn" onclick="notifyWait('${w.id}')">📲 أبلغه</button></div>`).join('');
 }
-async function notifyWait(id){const w=data.waitlist.find(x=>x.id===id);if(!w)return;const msg=`السلام عليكم ${w.name} 👋\n\n🎉 تفرغ وقت في Sun Shave ليوم ${w.day}!\n\nاحجز الحين ☀️`;openWA(w.phone,msg);data.waitlist=data.waitlist.filter(x=>x.id!==id);try{await save();renderWaitlist();toast(`✅ تم إبلاغ ${w.name}`);}catch{data.waitlist.push(w);}}
+async function notifyWait(id){const w=data.waitlist.find(x=>x.id===id);if(!w)return;const msg=`السلام عليكم ${w.name} 👋\n\n🎉 تفرغ وقت في Sun Shave ليوم ${w.day}!\n\nاحجز الآن ☀️`;openWA(w.phone,msg);data.waitlist=data.waitlist.filter(x=>x.id!==id);try{await save();renderWaitlist();toast(`✅ تم إبلاغ ${w.name}`);}catch{data.waitlist.push(w);}}
 
 function renderSettings(){
   // Render services editor
