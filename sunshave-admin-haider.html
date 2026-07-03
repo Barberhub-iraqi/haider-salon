@@ -388,6 +388,11 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
           </div>
           <div id="expList"></div>
         </div>
+        <div class="wcard" style="border-color:rgba(201,168,76,0.15)">
+          <div class="wcard-title">📊 سجل الإيرادات الشهرية</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;line-height:1.7">يتصفر الأرشيف والصرفيات تلقائياً أول كل شهر، وتنحفظ أرقام الشهر السابق هنا</div>
+          <div id="monthlyHistList"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -424,6 +429,19 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
   <!-- SETTINGS -->
   <div class="tc" id="tc-settings">
     <div class="sec" style="margin-top:14px">
+      <!-- SHOP BACKGROUND PHOTO -->
+      <div class="scard" style="border-color:rgba(201,168,76,0.2)">
+        <div class="stitle">🏪 صورة المحل (تظهر خلف الشعار بصفحة الزبون)</div>
+        <div class="srow">
+          <div class="slbl">🖼️ صورة الخلفية</div>
+          <div class="photo-upload-area" onclick="document.getElementById('shop-bg-input').click()" style="padding:10px">
+            <img id="shop-bg-preview" style="width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:none;"/>
+            <div class="photo-upload-text">اضغط لاختيار صورة الخلفية</div>
+          </div>
+          <input type="file" id="shop-bg-input" accept="image/*" style="display:none" onchange="onShopBgChange(event)"/>
+        </div>
+        <button class="save-btn" onclick="saveShopPhoto()">💾 حفظ صورة المحل</button>
+      </div>
       <!-- SERVICES PRICING EDITOR -->
       <div class="scard" style="border-color:rgba(201,168,76,0.2)">
         <div class="stitle">✂️ تسعيرة الخدمات</div>
@@ -588,6 +606,7 @@ let data={bookings:[],waitlist:[],disabledDays:[],blockedSlots:{},archivedBookin
   {id:'svc6',name:'تنظيف بشرة عادي',price:8000,icon:'🫧',duration:30}
 ]};
 let selDateKey='all',activeTab='bookings',activeSTab='week',lastSync=null;
+let shopBgBase64=null;
 
 function dk(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function dl(d){return`${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;}
@@ -662,7 +681,10 @@ async function load(){
         archivedBookings:typeof r.archivedBookings==='string'?JSON.parse(r.archivedBookings):(r.archivedBookings||[]),
         expenses:typeof r.expenses==='string'?JSON.parse(r.expenses):(r.expenses||[]),
         workHours:{start:r.workHoursStart||"5:00 م",end:r.workHoursEnd||"11:00 م"},
-        services:typeof r.services==='string'?JSON.parse(r.services):(r.services||defaultSvcs)
+        services:typeof r.services==='string'?JSON.parse(r.services):(r.services||defaultSvcs),
+        heroPhoto:r.heroPhoto||'',
+        monthlyHistory:typeof r.monthlyHistory==='string'?JSON.parse(r.monthlyHistory):(r.monthlyHistory||[]),
+        lastResetMonth:r.lastResetMonth||''
       };
       // إضافة svc7 (صبي) تلقائياً إذا ما كانت موجودة في Firebase
       if(!data.services.find(s=>s.name&&s.name.includes('صبي'))){
@@ -672,11 +694,14 @@ async function load(){
       const durMap={'svc1':60,'svc2':30,'svc3':15,'svc4':15,'svc5':45,'svc6':30,'svc7':30};
       data.services.forEach(s=>{if(!s.duration)s.duration=durMap[s.id]||60;});
     }
-    cleanOld();lastSync=new Date();syncBar(true);
+    cleanOld();
+    const resetHappened=monthlyReset();
+    lastSync=new Date();syncBar(true);
+    if(resetHappened){try{await save();}catch{}}
   }catch(e){syncBar(false);toast('خطأ في الاتصال');}
 }
 async function save(){
-  await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م"});
+  await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م",heroPhoto:data.heroPhoto||'',monthlyHistory:JSON.stringify(data.monthlyHistory||[]),lastResetMonth:data.lastResetMonth||monthKey(new Date())});
   lastSync=new Date();syncBar(true);
 }
 function cleanOld(){
@@ -694,6 +719,36 @@ function cleanOld(){
     toRemove.forEach(b=>{if(!data.archivedBookings.find(a=>a.id===b.id))data.archivedBookings.push({...b,autoArchived:true,completedAt:b.completedAt||Date.now()});});
     data.bookings=data.bookings.filter(b=>!toRemove.find(r=>r.id===b.id));
   }
+  return toRemove.length>0;
+}
+// تصفير الأرشيف والحسابات (الصرفيات) تلقائياً أول كل شهر — بعد حفظ ملخص الشهر المنتهي في سجل الإيرادات
+function monthlyReset(){
+  const curM=monthKey(new Date());
+  if(!data.monthlyHistory)data.monthlyHistory=[];
+  if(!data.lastResetMonth){data.lastResetMonth=curM;return false;}
+  if(data.lastResetMonth===curM)return false;
+  const seen=new Set(data.monthlyHistory.map(h=>h.month));
+  let m=data.lastResetMonth;
+  let guard=0;
+  while(m<curM&&guard<36){
+    if(!seen.has(m)){
+      const arc=(data.archivedBookings||[]).filter(b=>{
+        const mk=b.dateKey?monthKey(new Date(b.dateKey)):(b.completedAt?monthKey(new Date(b.completedAt)):null);
+        return mk===m;
+      });
+      const revenue=arc.reduce((s,b)=>s+(b.price||0),0);
+      const exps=(data.expenses||[]).filter(e=>e.month===m);
+      const expenses=exps.reduce((s,e)=>s+(e.amount||0),0);
+      data.monthlyHistory.push({month:m,label:monthLabel(m),revenue,expenses,profit:revenue-expenses,count:arc.length});
+    }
+    const[y,mo]=m.split('-').map(Number);
+    m=monthKey(new Date(y,mo,1));
+    guard++;
+  }
+  data.archivedBookings=[];
+  data.expenses=(data.expenses||[]).filter(e=>e.month>=curM);
+  data.lastResetMonth=curM;
+  return true;
 }
 async function loadAndRender(){await load();render();}
 function syncBar(ok){const s=document.getElementById('syncStatus');const l=document.getElementById('lastSync');if(lastSync)l.textContent='آخر تحديث: '+lastSync.toLocaleTimeString('ar-IQ',{hour:'2-digit',minute:'2-digit'});s.style.color=ok?'var(--green)':'#EF5350';s.textContent=ok?'متزامن ✓':'خطأ';}
@@ -821,8 +876,15 @@ function renderAcc(){
   document.getElementById('acc-r').textContent=mRev.toLocaleString('ar-IQ')+' د.ع';document.getElementById('acc-e').textContent=mExp.toLocaleString('ar-IQ')+' د.ع';
   const pel=document.getElementById('acc-p');pel.textContent=profit.toLocaleString('ar-IQ')+' د.ع';pel.className='acc-val '+(profit>=0?'gd':'rd');
   const fExp=data.expenses.filter(e=>e.month===fm);
-  const list=document.getElementById('expList');if(!fExp.length){list.innerHTML=`<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">لا توجد صرفيات</div>`;return;}
-  list.innerHTML=fExp.sort((a,b)=>b.createdAt-a.createdAt).map(e=>`<div class="exp-item"><div><div class="exp-name">${e.name}</div><div class="exp-sub">${monthLabel(e.month)}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="exp-amt">${e.amount.toLocaleString()} د.ع</span><button class="exp-del" onclick="window.delExp('${e.id}')">🗑️</button></div></div>`).join('');
+  const list=document.getElementById('expList');
+  list.innerHTML=fExp.length?fExp.sort((a,b)=>b.createdAt-a.createdAt).map(e=>`<div class="exp-item"><div><div class="exp-name">${e.name}</div><div class="exp-sub">${monthLabel(e.month)}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="exp-amt">${e.amount.toLocaleString()} د.ع</span><button class="exp-del" onclick="window.delExp('${e.id}')">🗑️</button></div></div>`).join(''):`<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">لا توجد صرفيات</div>`;
+  renderMonthlyHist();
+}
+function renderMonthlyHist(){
+  const el=document.getElementById('monthlyHistList');if(!el)return;
+  const hist=[...(data.monthlyHistory||[])].sort((a,b)=>b.month.localeCompare(a.month));
+  if(!hist.length){el.innerHTML=`<div style="text-align:center;padding:14px;color:var(--muted);font-size:12px">ما في سجل بعد — بيتسجل تلقائياً أول كل شهر جديد</div>`;return;}
+  el.innerHTML=hist.map(h=>`<div class="wrow"><span class="wday">${h.label}</span><span class="wcount" style="color:${h.profit>=0?'#66BB6A':'#EF5350'}">${h.revenue.toLocaleString('ar-IQ')} د.ع${h.expenses?` − ${h.expenses.toLocaleString('ar-IQ')}`:''} = ${h.profit.toLocaleString('ar-IQ')} د.ع</span></div>`).join('');
 }
 
 function renderArchive(){
@@ -838,6 +900,13 @@ function renderWaitlist(){
 async function notifyWait(id){const w=data.waitlist.find(x=>x.id===id);if(!w)return;const msg=`السلام عليكم ${w.name} 👋\n\n🎉 تفرغ وقت في Sun Shave ليوم ${w.day}!\n\nاحجز الآن ☀️`;openWA(w.phone,msg);data.waitlist=data.waitlist.filter(x=>x.id!==id);try{await save();renderWaitlist();toast(`✅ تم إبلاغ ${w.name}`);}catch{data.waitlist.push(w);}}
 
 function renderSettings(){
+  // Render shop background preview
+  shopBgBase64=null;
+  const bgPrev=document.getElementById('shop-bg-preview');
+  if(bgPrev){
+    if(data.heroPhoto){bgPrev.src=data.heroPhoto;bgPrev.style.display='block';}
+    else{bgPrev.removeAttribute('src');bgPrev.style.display='none';}
+  }
   // Render services editor
   const svcs=data.services||[];
   const sg=document.getElementById('svcEditGrid');
@@ -928,6 +997,40 @@ async function saveServices(){
   });
   try{await save();_svcPhotos={};toast('✅ تم حفظ الخدمات');updateManualSvcSelect();}catch{toast('❌ فشل الحفظ');}
 }
+
+function onShopBgChange(e){
+  const f=e.target.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=900;
+      let w=img.width,h=img.height;
+      if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
+      else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      shopBgBase64=canvas.toDataURL('image/jpeg',0.65);
+      const preview=document.getElementById('shop-bg-preview');
+      preview.src=shopBgBase64;preview.style.display='block';
+    };
+    img.src=ev.target.result;
+  };reader.readAsDataURL(f);
+}
+async function saveShopPhoto(){
+  const heroPhoto=shopBgBase64||data.heroPhoto||'';
+  if(heroPhoto){
+    const sizeKB=Math.round(heroPhoto.length*0.75/1024);
+    if(sizeKB>900){toast(`❌ حجم الصورة كبير جداً (${sizeKB}KB) — اختر صورة أصغر`);return;}
+  }
+  data.heroPhoto=heroPhoto;
+  shopBgBase64=null;
+  try{await save();toast('✅ تم حفظ صورة المحل');}catch{toast('❌ فشل الحفظ');}
+}
+window.onShopBgChange=onShopBgChange;window.saveShopPhoto=saveShopPhoto;
+
 
 // ── STORE / PRODUCTS ──
 let productsList=[];
@@ -1345,7 +1448,7 @@ window.switchTab=switchTab;window.sstab=sstab;window.loadAndRender=loadAndRender
 window.remind=remind;window.cancelB=cancelB;window.cancelLate=cancelLate;
 window.markDone=markDone;window.saveNote=saveNote;window.sendWait=sendWait;
 window.clearAll=clearAll;window.renderArchive=renderArchive;window.renderAcc=renderAcc;
-window.addExp=addExp;window.delExp=delExp;window.notifyWait=notifyWait;
+window.addExp=addExp;window.delExp=delExp;window.notifyWait=notifyWait;window.renderMonthlyHist=renderMonthlyHist;
 // ─── ntfy ───
 const NTFY_TOPIC='sunshave-haider-2026';
 async function sendNtfy(title,body){
