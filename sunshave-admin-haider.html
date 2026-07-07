@@ -316,10 +316,16 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
           <input id="mName" class="sinp" placeholder="اسم الزبون..."/>
           <input id="mPhone" class="sinp" placeholder="رقم الهاتف..." type="tel"/>
           <select id="mSvc" class="sinp" onchange="onMSvcChange()"><option value="">اختار الخدمة</option></select>
+          <div id="mKidsToggleWrap" style="display:none;">
+            <button type="button" id="mKidsAddonBtn" class="sm-btn" style="width:100%" onclick="toggleMKidsAddon()">👦 إضافة أطفال لهذا الحجز</button>
+          </div>
           <div id="mKidsRow" style="display:none;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.2);border-radius:8px;padding:10px;">
             <div style="font-size:10px;color:var(--gold);margin-bottom:7px;font-weight:700">👦 عدد الأطفال (١٥ د لكل طفل)</div>
             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;" id="mKidsGrid"></div>
             <div id="mKidsInfo" style="font-size:11px;color:var(--muted);margin-top:7px;text-align:center"></div>
+          </div>
+          <div id="mBoysToggleWrap" style="display:none;">
+            <button type="button" id="mBoysAddonBtn" class="sm-btn" style="width:100%" onclick="toggleMBoysAddon()">🧒 إضافة صبيان لهذا الحجز</button>
           </div>
           <div id="mBoysRow" style="display:none;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.2);border-radius:8px;padding:10px;">
             <div style="font-size:10px;color:var(--gold);margin-bottom:7px;font-weight:700">🧒 عدد الصبيان (٣٠ د لكل صبي)</div>
@@ -1238,28 +1244,29 @@ function showManual(){
   const ds=document.getElementById('mDay');ds.innerHTML='<option value="">اختار اليوم</option>';
   next7().forEach(d=>{const key=dk(d);const label=dl(d);const opt=document.createElement('option');opt.value=key;opt.textContent=label;opt.dataset.label=label;ds.appendChild(opt);});
   document.getElementById('mSlot').innerHTML='<option value="">اختار اليوم أولاً</option>';
-  mKidsCount=0;mBoysCount=0;
+  mKidsCount=0;mBoysCount=0;mKidsAddonOn=false;mBoysAddonOn=false;
   document.getElementById('mKidsRow').style.display='none';
   const br=document.getElementById('mBoysRow');if(br)br.style.display='none';
+  const ktw=document.getElementById('mKidsToggleWrap');if(ktw)ktw.style.display='none';
+  const btw=document.getElementById('mBoysToggleWrap');if(btw)btw.style.display='none';
 }
-function hideManual(){document.getElementById('manualForm').style.display='none';['mName','mPhone'].forEach(id=>document.getElementById(id).value='');document.getElementById('mSvc').value='';document.getElementById('mDay').value='';document.getElementById('mKidsRow').style.display='none';mKidsCount=0;const br=document.getElementById('mBoysRow');if(br)br.style.display='none';mBoysCount=0;}
+function hideManual(){document.getElementById('manualForm').style.display='none';['mName','mPhone'].forEach(id=>document.getElementById(id).value='');document.getElementById('mSvc').value='';document.getElementById('mDay').value='';document.getElementById('mKidsRow').style.display='none';mKidsCount=0;mBoysCount=0;mKidsAddonOn=false;mBoysAddonOn=false;const br=document.getElementById('mBoysRow');if(br)br.style.display='none';const ktw=document.getElementById('mKidsToggleWrap');if(ktw)ktw.style.display='none';const btw=document.getElementById('mBoysToggleWrap');if(btw)btw.style.display='none';}
+// مدة حجز معين بالدقائق — تراعي الحجوزات المركّبة (خدمة + أطفال/صبيان) والحجوزات اليدوية والعادية
+function getBookingDuration(b){
+  if(b.comboDuration)return Number(b.comboDuration);
+  if(b.kidsDuration)return Number(b.kidsDuration);
+  if(b.boysDuration)return Number(b.boysDuration);
+  if(b.kidsCount&&isKidsSvc(b.serviceId))return Number(b.kidsCount)*KIDS_DUR_PER;
+  if(b.boysCount&&isBoysSvc(b.serviceId))return Number(b.boysCount)*BOYS_DUR_PER;
+  return getSvcDuration(b.serviceId);
+}
 function slotsOccupiedByBooking(b){
-  // كل حجز يشغل وقته فقط — الأطفال والصبيان قد يحجزون أكثر حسب العدد
-  if(b.kidsCount&&isKidsSvc(b.serviceId)){
-    const dur=Number(b.kidsCount)*KIDS_DUR_PER;
-    const count=Math.max(1,Math.ceil(dur/60));
-    const allS=slots();const si=allS.indexOf(b.slot);
-    if(si<0)return[b.slot];
-    return allS.slice(si,Math.min(si+count,allS.length));
-  }
-  if(b.boysCount&&isBoysSvc(b.serviceId)){
-    const dur=Number(b.boysCount)*BOYS_DUR_PER;
-    const count=Math.max(1,Math.ceil(dur/60));
-    const allS=slots();const si=allS.indexOf(b.slot);
-    if(si<0)return[b.slot];
-    return allS.slice(si,Math.min(si+count,allS.length));
-  }
-  return[b.slot];
+  // كل حجز يشغل وقته حسب مدته الكاملة (تشمل الخدمة الأساسية + الأطفال/الصبيان المضافين)
+  const dur=getBookingDuration(b);
+  const count=Math.max(1,Math.ceil(dur/60));
+  const allS=slots();const si=allS.indexOf(b.slot);
+  if(si<0)return[b.slot];
+  return allS.slice(si,Math.min(si+count,allS.length));
 }
 
 const KIDS_DUR_PER=15;
@@ -1269,6 +1276,7 @@ function isOpenSvc(id){if(id==='svc3'||id==='svc5'||id==='svc6')return true;cons
 function isKidsSvc(id){const svc=(data.services||[]).find(s=>s.id===id);return !!(svc&&svc.name&&svc.name.includes('طفل'));}
 function kidsUnitPrice(){const svc=getKidsSvc();return svc?Number(svc.price):10000;}
 let mKidsCount=0;
+let mKidsAddonOn=false;
 
 const BOYS_DUR_PER=30;
 function getBoysSvc(){return(data.services||[]).find(s=>s.name&&s.name.includes('صبي'))||null;}
@@ -1276,29 +1284,76 @@ function getBoysSvcId(){const s=getBoysSvc();return s?s.id:null;}
 function isBoysSvc(id){const svc=(data.services||[]).find(s=>s.id===id);return !!(svc&&svc.name&&svc.name.includes('صبي'));}
 function boysUnitPrice(){const svc=getBoysSvc();return svc?Number(svc.price):10000;}
 let mBoysCount=0;
+let mBoysAddonOn=false;
 
-function onMSvcChange(){
+// يحدّث ظهور صفوف الأطفال/الصبيان: إما كخدمة أساسية مختارة مباشرة، أو كإضافة اختيارية فوق أي خدمة أخرى (مثلاً حلاقة كاملة + طفلين)
+function updateManualAddonVisibility(){
   const se=document.getElementById('mSvc');
   const selOpt=Array.from(se.options).find(o=>o.value===se.value);
   const svcId=selOpt?.dataset?.id||'';
-  const isKids=isKidsSvc(svcId);
-  const isBoys=isBoysSvc(svcId);
+  const mainIsKids=isKidsSvc(svcId);
+  const mainIsBoys=isBoysSvc(svcId);
+
   const kidsRow=document.getElementById('mKidsRow');
-  kidsRow.style.display=isKids?'block':'none';
+  const kidsToggleWrap=document.getElementById('mKidsToggleWrap');
+  const kidsAddonBtn=document.getElementById('mKidsAddonBtn');
   const boysRow=document.getElementById('mBoysRow');
-  if(boysRow)boysRow.style.display=isBoys?'block':'none';
-  if(isKids){
+  const boysToggleWrap=document.getElementById('mBoysToggleWrap');
+  const boysAddonBtn=document.getElementById('mBoysAddonBtn');
+
+  if(mainIsKids){
+    // الخدمة الأساسية نفسها هي خدمة الأطفال — لا حاجة لزر إضافة
+    if(kidsToggleWrap)kidsToggleWrap.style.display='none';
+    kidsRow.style.display='block';
     mKidsCount=mKidsCount||1;
+    mKidsAddonOn=false;
     renderMKidsGrid();
   } else {
-    mKidsCount=0;
+    if(kidsToggleWrap)kidsToggleWrap.style.display=svcId?'block':'none';
+    if(mKidsAddonOn){
+      kidsRow.style.display='block';
+      mKidsCount=mKidsCount||1;
+      renderMKidsGrid();
+    } else {
+      kidsRow.style.display='none';
+      mKidsCount=0;
+    }
+    if(kidsAddonBtn)kidsAddonBtn.textContent=mKidsAddonOn?'➖ إزالة الأطفال من الحجز':'👦 إضافة أطفال لهذا الحجز';
   }
-  if(isBoys){
+
+  if(mainIsBoys){
+    if(boysToggleWrap)boysToggleWrap.style.display='none';
+    boysRow.style.display='block';
     mBoysCount=mBoysCount||1;
+    mBoysAddonOn=false;
     renderMBoysGrid();
   } else {
-    mBoysCount=0;
+    if(boysToggleWrap)boysToggleWrap.style.display=svcId?'block':'none';
+    if(mBoysAddonOn){
+      boysRow.style.display='block';
+      mBoysCount=mBoysCount||1;
+      renderMBoysGrid();
+    } else {
+      boysRow.style.display='none';
+      mBoysCount=0;
+    }
+    if(boysAddonBtn)boysAddonBtn.textContent=mBoysAddonOn?'➖ إزالة الصبيان من الحجز':'🧒 إضافة صبيان لهذا الحجز';
   }
+}
+
+function toggleMKidsAddon(){
+  mKidsAddonOn=!mKidsAddonOn;
+  updateManualAddonVisibility();
+  updateMSlots();
+}
+function toggleMBoysAddon(){
+  mBoysAddonOn=!mBoysAddonOn;
+  updateManualAddonVisibility();
+  updateMSlots();
+}
+
+function onMSvcChange(){
+  updateManualAddonVisibility();
   updateMSlots();
 }
 
@@ -1370,32 +1425,68 @@ async function saveManual(){
   const name=document.getElementById('mName').value.trim();const phone=document.getElementById('mPhone').value.trim()||'هاتف';
   const se=document.getElementById('mSvc');const svcName=se.value;
   const selOpt=Array.from(se.options).find(o=>o.value===svcName);
-  let price=parseInt(selOpt?.dataset?.p)||0;
+  const basePrice=parseInt(selOpt?.dataset?.p)||0;
   const de=document.getElementById('mDay');const dateKey=de.value;
   const dayOpt=Array.from(de.options).find(o=>o.value===dateKey);
   const dateLabel=dayOpt?.dataset?.label||'';
   const slot=document.getElementById('mSlot').value;
   if(!name){toast('أدخل الاسم');return;}if(!svcName){toast('اختار الخدمة');return;}if(!dateKey){toast('اختار اليوم');return;}if(!slot){toast('اختار الساعة');return;}
   const svcId=selOpt?.dataset?.id||'';
-  const isKids=isKidsSvc(svcId);
-  const isBoys=isBoysSvc(svcId);
-  if(isKids&&!mKidsCount){toast('اختار عدد الأطفال');return;}
-  if(isBoys&&!mBoysCount){toast('اختار عدد الصبيان');return;}
-  // حساب المدة والسعر للأطفال والصبيان
-  let finalDuration=null;
+  const mainIsKids=isKidsSvc(svcId);
+  const mainIsBoys=isBoysSvc(svcId);
+  if(mainIsKids&&!mKidsCount){toast('اختار عدد الأطفال');return;}
+  if(mainIsBoys&&!mBoysCount){toast('اختار عدد الصبيان');return;}
+  const addKids=!mainIsKids&&mKidsAddonOn&&mKidsCount>0;
+  const addBoys=!mainIsBoys&&mBoysAddonOn&&mBoysCount>0;
+
+  let baseDuration=getSvcDuration(svcId);
+  let finalPrice=basePrice;
   let finalServiceName=svcName;
-  if(isKids&&mKidsCount){
-    price=mKidsCount*kidsUnitPrice();
-    finalDuration=mKidsCount*KIDS_DUR_PER;
+  const serviceIds=[svcId];
+  let kidsCountFinal=0,kidsDur=0;
+  let boysCountFinal=0,boysDur=0;
+
+  if(mainIsKids){
+    // الخدمة الأساسية نفسها هي خدمة الأطفال (سلوك سابق محفوظ)
+    finalPrice=mKidsCount*kidsUnitPrice();
+    baseDuration=mKidsCount*KIDS_DUR_PER;
+    kidsCountFinal=mKidsCount;
     finalServiceName=`${svcName} (${mKidsCount} طفل)`;
-  }
-  if(isBoys&&mBoysCount){
-    price=mBoysCount*boysUnitPrice();
-    finalDuration=mBoysCount*BOYS_DUR_PER;
+  } else if(mainIsBoys){
+    finalPrice=mBoysCount*boysUnitPrice();
+    baseDuration=mBoysCount*BOYS_DUR_PER;
+    boysCountFinal=mBoysCount;
     finalServiceName=`${svcName} (${mBoysCount} صبي)`;
+  } else {
+    // خدمة أساسية عادية (مثل حلاقة كاملة) + إضافات اختيارية للأطفال/الصبيان
+    if(addKids){
+      kidsCountFinal=mKidsCount;
+      kidsDur=mKidsCount*KIDS_DUR_PER;
+      finalPrice+=mKidsCount*kidsUnitPrice();
+      finalServiceName+=` + ${mKidsCount} طفل`;
+      const kidsId=getKidsSvcId();if(kidsId)serviceIds.push(kidsId);
+    }
+    if(addBoys){
+      boysCountFinal=mBoysCount;
+      boysDur=mBoysCount*BOYS_DUR_PER;
+      finalPrice+=mBoysCount*boysUnitPrice();
+      finalServiceName+=` + ${mBoysCount} صبي`;
+      const boysId=getBoysSvcId();if(boysId)serviceIds.push(boysId);
+    }
   }
-  const b={id:'ss'+Date.now(),name,phone,service:finalServiceName,serviceId:svcId,price:Number(price),kidsCount:isKids?mKidsCount:0,kidsDuration:isKids?finalDuration:null,boysCount:isBoys?mBoysCount:0,boysDuration:isBoys?finalDuration:null,dateKey,dateLabel,slot,day:dateLabel,createdAt:Date.now(),bookedAt:new Date().toLocaleTimeString('ar-IQ'),reminded:true,cancelled:false,manual:true,note:''};
-  data.bookings.push(b);try{await save();hideManual();render();toast(`✅ حُجز ${name}${isKids?` — ${mKidsCount} طفل`:isBoys?` — ${mBoysCount} صبي`:''}`);}catch{data.bookings.pop();toast('❌ فشل');}
+
+  const totalDuration=baseDuration+kidsDur+boysDur;
+
+  const b={
+    id:'ss'+Date.now(),name,phone,
+    service:finalServiceName,serviceId:svcId,serviceIds,
+    price:Number(finalPrice),
+    kidsCount:kidsCountFinal,kidsDuration:kidsCountFinal?kidsDur:null,
+    boysCount:boysCountFinal,boysDuration:boysCountFinal?boysDur:null,
+    comboDuration:totalDuration,
+    dateKey,dateLabel,slot,day:dateLabel,createdAt:Date.now(),bookedAt:new Date().toLocaleTimeString('ar-IQ'),reminded:true,cancelled:false,manual:true,note:''
+  };
+  data.bookings.push(b);try{await save();hideManual();render();toast(`✅ حُجز ${name}${kidsCountFinal?` — ${kidsCountFinal} طفل`:''}${boysCountFinal?` — ${boysCountFinal} صبي`:''}`);}catch{data.bookings.pop();toast('❌ فشل');}
 }
 
 function printToday(){
