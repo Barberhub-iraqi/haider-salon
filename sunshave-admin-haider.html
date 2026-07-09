@@ -476,6 +476,19 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--black);color:
         <div class="blk-slots-grid" id="blkSlotsGrid"><div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div></div>
         <div id="blkCount" style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px"></div>
       </div>
+      <!-- CUSTOM HOURS PER DAY CARD -->
+      <div class="scard" style="border-color:rgba(76,175,145,0.25)">
+        <div class="stitle" style="color:#5FC7A8">⏰ أوقات مخصصة ليوم معين</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">اختار يوم معين من الأسبوع الجاي وحدد له وقت دوام مختلف عن الافتراضي — مثلاً تفتح متأخر أو تمدد الدوام بيوم معين</div>
+        <div class="blk-day-sel" id="chDaySel"></div>
+        <div class="srow"><div class="slbl">وقت البداية</div><select class="sinp" id="chStart"></select></div>
+        <div class="srow"><div class="slbl">وقت النهاية</div><select class="sinp" id="chEnd"></select></div>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button class="save-btn" style="flex:1" onclick="saveCustomHours()">💾 حفظ وقت هذا اليوم</button>
+          <button style="flex:1;padding:11px;background:rgba(239,83,80,0.1);border:1px solid rgba(239,83,80,0.3);border-radius:8px;color:#EF5350;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;" onclick="clearCustomHours()">↩️ رجّع الافتراضي</button>
+        </div>
+        <div id="chInfo" style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px"></div>
+      </div>
       <div class="scard">
         <div class="stitle">🔒 تغيير رمز الدخول</div>
         <div class="srow"><div class="slbl">الرمز الحالي</div><input class="sinp" id="oldPin" type="password" maxlength="4" placeholder="الرمز الحالي"/></div>
@@ -603,7 +616,7 @@ const SH={"12:00 م":12,"1:00 م":13,"2:00 م":14,"3:00 م":15,"4:00 م":16,"5:0
 const DAYS=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 const MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
-let data={bookings:[],waitlist:[],disabledDays:[],blockedSlots:{},archivedBookings:[],expenses:[],workHours:{start:"5:00 م",end:"11:00 م"},services:[
+let data={bookings:[],waitlist:[],disabledDays:[],blockedSlots:{},customHours:{},archivedBookings:[],expenses:[],workHours:{start:"5:00 م",end:"11:00 م"},services:[
   {id:'svc1',name:'حلاقة كاملة',price:20000,icon:'✂️',duration:60},
   {id:'svc2',name:'تحديد ولحية',price:10000,icon:'🪒',duration:30},
   {id:'svc3',name:'شسوار',price:5000,icon:'💧',duration:15},
@@ -620,8 +633,8 @@ function fp(p){return Number(p).toLocaleString('ar-IQ')+' د.ع';}
 function next7(){const r=[];const t=new Date();t.setHours(0,0,0,0);for(let i=0;i<7;i++){const d=new Date(t);d.setDate(t.getDate()+i);r.push(d);}return r;}
 function todayK(){return dk(new Date());}
 function normPhone(p){const c=p.replace(/\D/g,'');return c.startsWith('964')?'0'+c.slice(3):c;}
-function wh(){return data.workHours||{start:"5:00 م",end:"11:00 م"};}
-function slots(){const w=wh();const si=ALL_SLOTS.indexOf(w.start);const ei=ALL_SLOTS.indexOf(w.end);if(si<0||ei<0)return["5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م"];return ei>=si?ALL_SLOTS.slice(si,ei+1):[...ALL_SLOTS.slice(si),...ALL_SLOTS.slice(0,ei+1)];}
+function wh(dateKey){if(dateKey&&data.customHours&&data.customHours[dateKey])return data.customHours[dateKey];return data.workHours||{start:"5:00 م",end:"11:00 م"};}
+function slots(dateKey){const w=wh(dateKey);const si=ALL_SLOTS.indexOf(w.start);const ei=ALL_SLOTS.indexOf(w.end);if(si<0||ei<0)return["5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م"];return ei>=si?ALL_SLOTS.slice(si,ei+1):[...ALL_SLOTS.slice(si),...ALL_SLOTS.slice(0,ei+1)];}
 function slotDateTime(dateKey,slot){
   const h=SH[slot];if(h===undefined)return null;
   const hFloor=Math.floor(h);const mins=h%1!==0?30:0;
@@ -684,6 +697,7 @@ async function load(){
         waitlist:typeof r.waitlist==='string'?JSON.parse(r.waitlist):(r.waitlist||[]),
         disabledDays:typeof r.disabledDays==='string'?JSON.parse(r.disabledDays):(r.disabledDays||[]),
         blockedSlots:typeof r.blockedSlots==='string'?JSON.parse(r.blockedSlots):(r.blockedSlots||{}),
+        customHours:typeof r.customHours==='string'?JSON.parse(r.customHours):(r.customHours||{}),
         archivedBookings:typeof r.archivedBookings==='string'?JSON.parse(r.archivedBookings):(r.archivedBookings||[]),
         expenses:typeof r.expenses==='string'?JSON.parse(r.expenses):(r.expenses||[]),
         workHours:{start:r.workHoursStart||"5:00 م",end:r.workHoursEnd||"11:00 م"},
@@ -707,7 +721,7 @@ async function load(){
   }catch(e){syncBar(false);toast('خطأ في الاتصال');}
 }
 async function save(){
-  await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م",heroPhoto:data.heroPhoto||'',monthlyHistory:JSON.stringify(data.monthlyHistory||[]),lastResetMonth:data.lastResetMonth||monthKey(new Date())});
+  await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),customHours:JSON.stringify(data.customHours||{}),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م",heroPhoto:data.heroPhoto||'',monthlyHistory:JSON.stringify(data.monthlyHistory||[]),lastResetMonth:data.lastResetMonth||monthKey(new Date())});
   lastSync=new Date();syncBar(true);
 }
 function cleanOld(){
@@ -955,6 +969,8 @@ function renderSettings(){
   next7().forEach(d=>{const key=dk(d);const off=(data.disabledDays||[]).includes(key);const card=document.createElement('div');card.className='dis-day'+(off?' off':'');card.innerHTML=`<span class="dd-name">${DAYS[d.getDay()]}</span><span class="dd-num">${d.getDate()}</span><span class="dd-month">${MONTHS[d.getMonth()]}</span>`;card.onclick=()=>toggleDay(key);g.appendChild(card);});
   // render blocked slots day selector
   renderBlkDaySel();
+  // render custom hours per day selector
+  renderChDaySel();
 }
 
 function addSvc(){
@@ -1189,7 +1205,7 @@ function renderBlkDaySel(){
 function renderBlkSlots(){
   const g=document.getElementById('blkSlotsGrid');if(!g)return;
   if(!blkSelDay){g.innerHTML='<div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div>';return;}
-  const workSlots=slots();
+  const workSlots=slots(blkSelDay);
   const blocked=(data.blockedSlots||{})[blkSelDay]||[];
   const bookedSet=new Set(data.bookings.filter(b=>b.dateKey===blkSelDay&&!b.cancelled).flatMap(b=>slotsOccupiedByBooking(b)));
   g.innerHTML='';
@@ -1229,6 +1245,56 @@ async function toggleBlkSlot(dateKey,slot){
 }
 window.toggleBlkSlot=toggleBlkSlot;
 
+// ── Custom Hours Per Day ──
+let chSelDay=null;
+function renderChDaySel(){
+  const g=document.getElementById('chDaySel');if(!g)return;
+  g.innerHTML='';
+  next7().forEach(d=>{
+    const key=dk(d);
+    const has=!!(data.customHours&&data.customHours[key]);
+    const btn=document.createElement('button');
+    btn.className='blk-day-pill'+(chSelDay===key?' active':'');
+    btn.textContent=`${DAYS[d.getDay()]} ${d.getDate()}${has?' ⏰':''}`;
+    btn.onclick=()=>{chSelDay=key;renderChDaySel();};
+    g.appendChild(btn);
+  });
+  renderChHoursForm();
+}
+function renderChHoursForm(){
+  const cs=document.getElementById('chStart'),ce=document.getElementById('chEnd'),info=document.getElementById('chInfo');
+  if(!cs||!ce)return;
+  cs.innerHTML='';ce.innerHTML='';
+  if(!chSelDay){cs.disabled=true;ce.disabled=true;if(info)info.textContent='اختار يوماً أولاً';return;}
+  cs.disabled=false;ce.disabled=false;
+  const custom=(data.customHours||{})[chSelDay];
+  const w=custom||wh();
+  ALL_SLOTS.forEach(s=>{
+    const o1=document.createElement('option');o1.value=s;o1.textContent=s;if(s===w.start)o1.selected=true;cs.appendChild(o1);
+    const o2=document.createElement('option');o2.value=s;o2.textContent=s;if(s===w.end)o2.selected=true;ce.appendChild(o2);
+  });
+  if(info)info.textContent=custom?`⏰ هذا اليوم إله وقت مخصص: ${custom.start} — ${custom.end}`:'يستخدم حالياً الوقت الافتراضي — ما زبطته لهسا';
+}
+async function saveCustomHours(){
+  if(!chSelDay){toast('اختار يوماً أولاً');return;}
+  const cs=document.getElementById('chStart'),ce=document.getElementById('chEnd');
+  const st=cs.options[cs.selectedIndex].value,en=ce.options[ce.selectedIndex].value;
+  if(!data.customHours)data.customHours={};
+  const prev=data.customHours[chSelDay];
+  data.customHours[chSelDay]={start:st,end:en};
+  try{await save();toast('✅ تم حفظ وقت اليوم المخصص');renderChDaySel();}
+  catch{if(prev)data.customHours[chSelDay]=prev;else delete data.customHours[chSelDay];toast('❌ فشل');}
+}
+async function clearCustomHours(){
+  if(!chSelDay){toast('اختار يوماً أولاً');return;}
+  if(!data.customHours||!data.customHours[chSelDay]){toast('هذا اليوم ماله وقت مخصص أصلاً');return;}
+  const prev=data.customHours[chSelDay];
+  delete data.customHours[chSelDay];
+  try{await save();toast('↩️ رجّع الوقت الافتراضي لهذا اليوم');renderChDaySel();}
+  catch{data.customHours[chSelDay]=prev;toast('❌ فشل');}
+}
+window.saveCustomHours=saveCustomHours;window.clearCustomHours=clearCustomHours;
+
 async function changePIN(){
   const old=document.getElementById('oldPin').value.trim();const nw=document.getElementById('newPin').value.trim();
   if(!old||!nw){toast('أدخل الرمز الحالي والجديد');return;}
@@ -1264,7 +1330,7 @@ function slotsOccupiedByBooking(b){
   // كل حجز يشغل وقته حسب مدته الكاملة (تشمل الخدمة الأساسية + الأطفال/الصبيان المضافين)
   const dur=getBookingDuration(b);
   const count=Math.max(1,Math.ceil(dur/60));
-  const allS=slots();const si=allS.indexOf(b.slot);
+  const allS=slots(b.dateKey);const si=allS.indexOf(b.slot);
   if(si<0)return[b.slot];
   return allS.slice(si,Math.min(si+count,allS.length));
 }
@@ -1401,7 +1467,7 @@ function updateMSlots(){
   const sel=document.getElementById('mSlot');
   sel.innerHTML='<option value="">اختار الساعة</option>';
   if(!dateKey)return;
-  const workSlots=slots();
+  const workSlots=slots(dateKey);
   // تحقق إذا الخدمة المختارة مفتوحة (شسوار أو تنظيف بشرة)
   const se=document.getElementById('mSvc');
   const selOpt=Array.from(se.options).find(o=>o.value===se.value);

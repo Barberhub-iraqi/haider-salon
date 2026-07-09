@@ -502,7 +502,7 @@ const DEFAULT_SVCS = [
 ];
 let SVCS = [...DEFAULT_SVCS];
 
-let db={bookings:[],waitlist:[],disabledDays:[],workHours:{start:"4:00 م",end:"11:00 م"}};
+let db={bookings:[],waitlist:[],disabledDays:[],blockedSlots:{},customHours:{},workHours:{start:"4:00 م",end:"11:00 م"}};
 let selSvcs=[]; // مصفوفة معرّفات الخدمات المختارة (يدعم اختيار أكثر من خدمة بنفس الحجز)
 let selDateKey=null,selDateLabel=null,selSlot=null,busy=false;
 let kidsCount=0,kidsSelectedTemp=0;
@@ -701,7 +701,8 @@ function next7(){const r=[];const t=new Date();t.setHours(0,0,0,0);for(let i=0;i
 function normPhone(p){const c=p.replace(/\D/g,'');return c.startsWith('964')?'0'+c.slice(3):c;}
 function validPhone(p){return/^07[3-9]\d{8}$/.test(normPhone(p));}
 function validName(n){return n.trim().length>=3&&/[\u0600-\u06FFa-zA-Z]/.test(n);}
-function slots(){const wh=db.workHours||{start:"5:00 م",end:"11:00 م"};const si=ALL_SLOTS.indexOf(wh.start);const ei=ALL_SLOTS.indexOf(wh.end);if(si<0||ei<0)return["5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م"];return ei>=si?ALL_SLOTS.slice(si,ei+1):[...ALL_SLOTS.slice(si),...ALL_SLOTS.slice(0,ei+1)];}
+function whFor(dateKey){if(dateKey&&db.customHours&&db.customHours[dateKey])return db.customHours[dateKey];return db.workHours||{start:"5:00 م",end:"11:00 م"};}
+function slots(dateKey){const wh=whFor(dateKey);const si=ALL_SLOTS.indexOf(wh.start);const ei=ALL_SLOTS.indexOf(wh.end);if(si<0||ei<0)return["5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م"];return ei>=si?ALL_SLOTS.slice(si,ei+1):[...ALL_SLOTS.slice(si),...ALL_SLOTS.slice(0,ei+1)];}
 function slotDateTime(dk,s){
   const h=SLOT_H[s];if(h===undefined)return null;
   const hFloor=Math.floor(h);const mins=h%1!==0?30:0;
@@ -738,7 +739,7 @@ function occupiedSlots(b){
   if(isShiswarSvc(b.serviceId))return[];
   const dur=getBookingDuration(b);
   const count=Math.max(1,Math.ceil(dur/60));
-  const allS=slots();
+  const allS=slots(b.dateKey);
   const si=allS.indexOf(b.slot);
   if(si<0)return[b.slot];
   return allS.slice(si,Math.min(si+count,allS.length));
@@ -764,7 +765,7 @@ function canBook(dk,startSlot){
   if(onlyFreeSvcs)return !isPast(dk,startSlot);
   const dur=selDur();
   const count=Math.max(1,Math.ceil(dur/60));
-  const allS=slots();
+  const allS=slots(dk);
   const si=allS.indexOf(startSlot);
   if(si<0)return false;
   if(isPast(dk,startSlot))return false;
@@ -788,7 +789,7 @@ function canBook(dk,startSlot){
 
 function phoneBooked(p){const np=normPhone(p);return db.bookings.some(b=>!b.cancelled&&normPhone(b.phone||'')===np);}
 function allBooked(dk){
-  const av=slots().filter(s=>!isPast(dk,s)&&!isBooked(dk,s));
+  const av=slots(dk).filter(s=>!isPast(dk,s)&&!isBooked(dk,s));
   if(av.length===0)return true;
   // لو ما في ولا وقت يكفي للخدمات المختارة
   if(selSvcs.length)return!av.some(s=>canBook(dk,s));
@@ -805,6 +806,7 @@ async function load(){
         waitlist:typeof r.waitlist==='string'?JSON.parse(r.waitlist):(r.waitlist||[]),
         disabledDays:typeof r.disabledDays==='string'?JSON.parse(r.disabledDays):(r.disabledDays||[]),
         blockedSlots:typeof r.blockedSlots==='string'?JSON.parse(r.blockedSlots):(r.blockedSlots||{}),
+        customHours:typeof r.customHours==='string'?JSON.parse(r.customHours):(r.customHours||{}),
         workHours:{start:r.workHoursStart||"5:00 م",end:r.workHoursEnd||"11:00 م"},
         services:db.services||SVCS,
       };
@@ -930,7 +932,8 @@ function renderSlots(){
   wrap.style.display='block';
   const dur=selDur();
   const lbl=selSvcs.length?` — مدة الخدمة: ${durLabel(dur)}`:'';
-  document.getElementById('slotsLabel').textContent=`الأوقات — ${selDateLabel}${lbl}`;
+  const hasCustom=!!(db.customHours&&db.customHours[selDateKey]);
+  document.getElementById('slotsLabel').textContent=`الأوقات — ${selDateLabel}${lbl}${hasCustom?' ⏰':''}`;
   const g=document.getElementById('slotsGrid');g.innerHTML='';
   const full=allBooked(selDateKey);
   document.getElementById('allBkdBox').style.display=full?'block':'none';
@@ -938,7 +941,7 @@ function renderSlots(){
   document.getElementById('bookBtnWrap').style.display=full?'none':'block';
   // إذا كل الخدمات المختارة من نوع الشسوار/تنظيف البشرة فقط — لا تشغل وقت كرسي
   const onlyFreeSvcs=selSvcs.length>0&&selSvcs.every(id=>isShiswarSvc(id));
-  const allS=slots();
+  const allS=slots(selDateKey);
   allS.forEach((s)=>{
     const past=isPast(selDateKey,s);
     const bkd=onlyFreeSvcs?false:isBooked(selDateKey,s);
