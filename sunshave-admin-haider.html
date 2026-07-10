@@ -635,13 +635,20 @@ function todayK(){return dk(new Date());}
 function normPhone(p){const c=p.replace(/\D/g,'');return c.startsWith('964')?'0'+c.slice(3):c;}
 function wh(dateKey){if(dateKey&&data.customHours&&data.customHours[dateKey])return data.customHours[dateKey];return data.workHours||{start:"5:00 م",end:"11:00 م"};}
 function slots(dateKey){const w=wh(dateKey);const si=ALL_SLOTS.indexOf(w.start);const ei=ALL_SLOTS.indexOf(w.end);if(si<0||ei<0)return["5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م"];return ei>=si?ALL_SLOTS.slice(si,ei+1):[...ALL_SLOTS.slice(si),...ALL_SLOTS.slice(0,ei+1)];}
+// هل هذا الوقت يقع بعد منتصف الليل (يتبع اليوم التالي) بناءً على أوقات دوام هذا اليوم تحديداً
+function isNextDaySlot(dateKey,slot){
+  const h=SH[slot];if(h===undefined)return false;
+  const w=wh(dateKey);
+  const sh=SH[w.start],eh=SH[w.end];
+  if(sh===undefined||eh===undefined)return false;
+  const wraps=eh<sh; // الدوام يمتد بعد منتصف الليل
+  return wraps&&h<sh;
+}
 function slotDateTime(dateKey,slot){
   const h=SH[slot];if(h===undefined)return null;
   const hFloor=Math.floor(h);const mins=h%1!==0?30:0;
-  // ساعات الصباح الباكر (ص) تنتمي لليوم التالي
-  const isMidnight=h>=0&&h<12&&slot&&slot.includes('ص');
   const base=new Date(dateKey+'T00:00:00');
-  if(isMidnight)base.setDate(base.getDate()+1);
+  if(isNextDaySlot(dateKey,slot))base.setDate(base.getDate()+1);
   base.setHours(hFloor,mins,0,0);
   return base;
 }
@@ -728,9 +735,7 @@ function cleanOld(){
   const t=todayK();
   const toRemove=data.bookings.filter(b=>{
     if(!b.dateKey)return true;
-    const h=SH[b.slot];
-    const isMidnight=b.slot&&b.slot.includes('ص')&&h!==undefined&&h<12;
-    if(isMidnight){const nd=new Date(b.dateKey+'T00:00:00');nd.setDate(nd.getDate()+1);return dk(nd)<t;}
+    if(isNextDaySlot(b.dateKey,b.slot)){const nd=new Date(b.dateKey+'T00:00:00');nd.setDate(nd.getDate()+1);return dk(nd)<t;}
     return b.dateKey<t;
   });
   // أرشفة الحجوزات القديمة قبل حذفها

@@ -703,12 +703,19 @@ function validPhone(p){return/^07[3-9]\d{8}$/.test(normPhone(p));}
 function validName(n){return n.trim().length>=3&&/[\u0600-\u06FFa-zA-Z]/.test(n);}
 function whFor(dateKey){if(dateKey&&db.customHours&&db.customHours[dateKey])return db.customHours[dateKey];return db.workHours||{start:"5:00 م",end:"11:00 م"};}
 function slots(dateKey){const wh=whFor(dateKey);const si=ALL_SLOTS.indexOf(wh.start);const ei=ALL_SLOTS.indexOf(wh.end);if(si<0||ei<0)return["5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م"];return ei>=si?ALL_SLOTS.slice(si,ei+1):[...ALL_SLOTS.slice(si),...ALL_SLOTS.slice(0,ei+1)];}
+function isNextDaySlot(dk,slot){
+  const h=SLOT_H[slot];if(h===undefined)return false;
+  const w=whFor(dk);
+  const sh=SLOT_H[w.start],eh=SLOT_H[w.end];
+  if(sh===undefined||eh===undefined)return false;
+  const wraps=eh<sh; // الدوام يمتد بعد منتصف الليل
+  return wraps&&h<sh;
+}
 function slotDateTime(dk,s){
   const h=SLOT_H[s];if(h===undefined)return null;
   const hFloor=Math.floor(h);const mins=h%1!==0?30:0;
-  const isMidnight=s&&s.includes('ص')&&h<12;
   const base=new Date(dk+'T00:00:00');
-  if(isMidnight)base.setDate(base.getDate()+1);
+  if(isNextDaySlot(dk,s))base.setDate(base.getDate()+1);
   base.setHours(hFloor,mins,0,0);
   return base;
 }
