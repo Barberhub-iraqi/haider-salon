@@ -812,7 +812,7 @@ function renderBookings(){
           <div><span class="c-name">${b.name}</span>${b.reminded?'<span class="tag t-ok">✓ ذُكِّر</span>':''}${b.manual?'<span class="tag t-manual">📞 يدوي</span>':''}${open?'<span class="tag" style="color:#00BCD4;background:rgba(0,188,212,0.1);border:1px solid rgba(0,188,212,0.2)">💧 مفتوح</span>':''}${late?`<span class="tag t-late">⚠️ ${mins}د</span>`:''}</div>
           <div style="margin-top:4px;font-size:12px;color:var(--muted)">${b.service} — ${fp(b.price||0)}</div>
         </div>
-        <div class="time-chip" style="margin-right:8px">⏰ ${b.slot}</div>
+        <div class="time-chip" style="margin-right:8px">⏰ ${b.slot&&b.slot!=='null'?b.slot:'—'}</div>
       </div>
       <div class="cinfo">
         <span>📞 ${b.phone}</span><span>🕐 ${b.bookedAt||''}</span>
@@ -1502,6 +1502,7 @@ async function saveManual(){
   const dateLabel=dayOpt?.dataset?.label||'';
   const slot=document.getElementById('mSlot').value;
   if(!name){toast('أدخل الاسم');return;}if(!svcName){toast('اختار الخدمة');return;}if(!dateKey){toast('اختار اليوم');return;}if(!slot){toast('اختار الساعة');return;}
+  if(slot==='null'||slot==null){toast('❌ خطأ بالساعة — اختارها من جديد');return;}
   const svcId=selOpt?.dataset?.id||'';
   const mainIsKids=isKidsSvc(svcId);
   const mainIsBoys=isBoysSvc(svcId);

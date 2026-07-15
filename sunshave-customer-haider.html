@@ -979,6 +979,7 @@ async function doBook(){
   const btn=document.getElementById('bookBtn');
   btn.disabled=true;btn.textContent='⏳ جاري الحجز...';busy=true;
   await load();
+  if(!selSvcs.length||!selDateKey||!selSlot){toast('صار تغيير بالخدمات أثناء الحجز، رجاءً أعد الاختيار');renderSlots();btn.disabled=false;updateBtn();busy=false;return;}
   const onlyFreeSvcs=selSvcs.every(id=>isShiswarSvc(id));
   if(!onlyFreeSvcs&&isBooked(selDateKey,selSlot)){toast('هذا الوقت انحجز للتو!');renderSlots();btn.disabled=false;updateBtn();busy=false;return;}
   if(phoneBooked(phone)){toast('هذا الرقم عنده حجز مسبق!');btn.disabled=false;updateBtn();busy=false;return;}
