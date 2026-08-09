@@ -225,6 +225,9 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--bg);color:var
 .blk-slot:hover{border-color:rgba(239,83,80,0.4);color:#C0392B;}
 .blk-slot.blocked{background:rgba(107,32,32,0.25);border-color:rgba(239,83,80,0.5);color:#C0392B;}
 .blk-slot.booked{opacity:.4;cursor:not-allowed;}
+.blk-slot.partial{background:rgba(239,83,80,0.08);border-color:rgba(239,83,80,0.35);color:#C0392B;border-style:dashed;}
+.blk-quick-btn{background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:6px 11px;color:var(--muted);font-family:'Cairo',sans-serif;font-size:10px;font-weight:700;cursor:pointer;}
+.blk-quick-btn:hover{border-color:var(--gold);color:var(--gold);}
 
 /* MISC */
 .empty{text-align:center;padding:40px 0;border:1px dashed var(--border2);border-radius:12px;}
@@ -473,9 +476,13 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--bg);color:var
       <!-- BLOCKED SLOTS CARD -->
       <div class="scard" style="border-color:rgba(239,83,80,0.2)">
         <div class="stitle" style="color:#C0392B">🚫 حجب ساعات معينة</div>
-        <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">اختار اليوم ثم اضغط على الساعات اللي تريد تحجبها — تظهر للزبائن كـ"محجوزة"</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">اختار يوم واحد أو أكثر (تكدر تكرر نفس الحجب بعدة أيام دفعة وحدة) ثم اضغط على الساعات اللي تريد حجبها — تظهر للزبائن كـ"محجوزة"</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <button class="blk-quick-btn" onclick="blkSelectAll()">✅ تحديد كل الأيام</button>
+          <button class="blk-quick-btn" onclick="blkClearSel()">✖️ إلغاء التحديد</button>
+        </div>
         <div class="blk-day-sel" id="blkDaySel"></div>
-        <div class="blk-slots-grid" id="blkSlotsGrid"><div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div></div>
+        <div class="blk-slots-grid" id="blkSlotsGrid"><div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً واحداً أو أكثر أولاً</div></div>
         <div id="blkCount" style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px"></div>
       </div>
       <!-- CUSTOM HOURS PER DAY CARD -->
@@ -1194,60 +1201,86 @@ async function saveHours(){const ws=document.getElementById('wStart');const we=d
 async function toggleDay(key){if(!data.disabledDays)data.disabledDays=[];const was=data.disabledDays.includes(key);if(was)data.disabledDays=data.disabledDays.filter(d=>d!==key);else data.disabledDays.push(key);try{await save();toast(was?'✅ تم تفعيل اليوم':'🚫 تم تعطيل اليوم');renderSettings();}catch{if(was)data.disabledDays.push(key);else data.disabledDays=data.disabledDays.filter(d=>d!==key);}}
 
 // ── Blocked Slots ──
-let blkSelDay=null;
+let blkSelDays=new Set();
+function blkSelectAll(){next7().forEach(d=>blkSelDays.add(dk(d)));renderBlkDaySel();}
+function blkClearSel(){blkSelDays.clear();renderBlkDaySel();}
+window.blkSelectAll=blkSelectAll;window.blkClearSel=blkClearSel;
 function renderBlkDaySel(){
   const g=document.getElementById('blkDaySel');if(!g)return;
   g.innerHTML='';
   next7().forEach(d=>{
     const key=dk(d);
     const btn=document.createElement('button');
-    btn.className='blk-day-pill'+(blkSelDay===key?' active':'');
+    btn.className='blk-day-pill'+(blkSelDays.has(key)?' active':'');
     const cnt=((data.blockedSlots||{})[key]||[]).length;
     btn.textContent=`${DAYS[d.getDay()]} ${d.getDate()}${cnt?` (${cnt}🚫)`:''}`;
-    btn.onclick=()=>{blkSelDay=key;renderBlkDaySel();renderBlkSlots();};
+    btn.onclick=()=>{blkSelDays.has(key)?blkSelDays.delete(key):blkSelDays.add(key);renderBlkDaySel();};
     g.appendChild(btn);
   });
   renderBlkSlots();
 }
 function renderBlkSlots(){
   const g=document.getElementById('blkSlotsGrid');if(!g)return;
-  if(!blkSelDay){g.innerHTML='<div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div>';return;}
-  const workSlots=slots(blkSelDay);
-  const blocked=(data.blockedSlots||{})[blkSelDay]||[];
-  const bookedSet=new Set(data.bookings.filter(b=>b.dateKey===blkSelDay&&!b.cancelled).flatMap(b=>slotsOccupiedByBooking(b)));
+  if(!blkSelDays.size){g.innerHTML='<div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً واحداً أو أكثر أولاً</div>';return;}
+  const selDays=[...blkSelDays];
+  const workSlots=ALL_SLOTS.filter(s=>selDays.some(d=>slots(d).includes(s)));
   g.innerHTML='';
   workSlots.forEach(s=>{
-    const isBlocked=blocked.includes(s);
-    const isBooked=bookedSet.has(s);
+    const validDays=selDays.filter(d=>slots(d).includes(s));
+    let blockedCount=0,bookedCount=0;
+    validDays.forEach(dateKey=>{
+      const blocked=(data.blockedSlots||{})[dateKey]||[];
+      if(blocked.includes(s))blockedCount++;
+      const bookedSet=new Set(data.bookings.filter(b=>b.dateKey===dateKey&&!b.cancelled).flatMap(b=>slotsOccupiedByBooking(b)));
+      if(bookedSet.has(s))bookedCount++;
+    });
+    const allBooked=bookedCount>0&&bookedCount===validDays.length;
+    const allBlocked=blockedCount>0&&blockedCount===validDays.length;
+    const partial=blockedCount>0&&!allBlocked;
     const btn=document.createElement('button');
-    btn.className='blk-slot'+(isBlocked?' blocked':'')+(isBooked?' booked':'');
-    btn.textContent=s+(isBooked?'\n📅':'');
-    btn.title=isBooked?'هذا الوقت فيه حجز حقيقي':'';
-    if(!isBooked){
-      btn.onclick=()=>toggleBlkSlot(blkSelDay,s);
+    btn.className='blk-slot'+(allBlocked?' blocked':'')+(partial?' partial':'')+(allBooked?' booked':'');
+    btn.textContent=s+(bookedCount?'\n📅':'');
+    btn.title=allBooked?'هذا الوقت فيه حجز حقيقي بكل الأيام المختارة':(bookedCount?`محجوز حقيقياً في ${bookedCount} من ${validDays.length} أيام مختارة`:'');
+    if(!allBooked){
+      btn.onclick=()=>toggleBlkSlot(s);
     } else {
       btn.disabled=true;
     }
     g.appendChild(btn);
   });
-  const cnt=blocked.length;
+  const totalBlocked=selDays.reduce((sum,d)=>sum+((data.blockedSlots||{})[d]||[]).length,0);
   const countEl=document.getElementById('blkCount');
-  if(countEl)countEl.textContent=cnt?`🚫 ${cnt} ساعة محجوبة في هذا اليوم — اضغط عليها مرة ثانية لإلغاء الحجب`:'✅ كل الساعات متاحة في هذا اليوم';
+  if(countEl)countEl.textContent=selDays.length>1?`📌 ${selDays.length} أيام مختارة — مجموع الساعات المحجوبة فيها ${totalBlocked}`:(totalBlocked?`🚫 ${totalBlocked} ساعة محجوبة في هذا اليوم — اضغط عليها مرة ثانية لإلغاء الحجب`:'✅ كل الساعات متاحة في هذا اليوم');
 }
-async function toggleBlkSlot(dateKey,slot){
+async function toggleBlkSlot(slot){
+  if(!blkSelDays.size)return;
   if(!data.blockedSlots)data.blockedSlots={};
-  if(!data.blockedSlots[dateKey])data.blockedSlots[dateKey]=[];
-  const arr=data.blockedSlots[dateKey];
-  const idx=arr.indexOf(slot);
-  if(idx>=0)arr.splice(idx,1);else arr.push(slot);
-  if(!arr.length)delete data.blockedSlots[dateKey];
+  const selDays=[...blkSelDays];
+  const applicable=selDays.filter(dateKey=>{
+    if(!slots(dateKey).includes(slot))return false;
+    const bookedSet=new Set(data.bookings.filter(b=>b.dateKey===dateKey&&!b.cancelled).flatMap(b=>slotsOccupiedByBooking(b)));
+    return !bookedSet.has(slot);
+  });
+  if(!applicable.length){toast('❌ هذا الوقت غير متاح أو فيه حجز حقيقي بكل الأيام المختارة');return;}
+  const allBlocked=applicable.every(d=>((data.blockedSlots[d]||[]).includes(slot)));
+  const prev={};
+  applicable.forEach(d=>{prev[d]=data.blockedSlots[d]?[...data.blockedSlots[d]]:null;});
+  applicable.forEach(d=>{
+    if(!data.blockedSlots[d])data.blockedSlots[d]=[];
+    const arr=data.blockedSlots[d];
+    const idx=arr.indexOf(slot);
+    if(allBlocked){if(idx>=0)arr.splice(idx,1);}
+    else{if(idx<0)arr.push(slot);}
+    if(!arr.length)delete data.blockedSlots[d];
+  });
   try{
     await save();
     renderBlkDaySel();
-    toast(idx>=0?`✅ فُتح وقت ${slot}`:`🚫 حُجب وقت ${slot}`);
+    toast(allBlocked?`✅ فُتح وقت ${slot} في ${applicable.length} يوم`:`🚫 حُجب وقت ${slot} في ${applicable.length} يوم`);
   }catch{
-    if(idx>=0)arr.splice(idx,0,slot);else arr.pop();
+    applicable.forEach(d=>{if(prev[d])data.blockedSlots[d]=prev[d];else delete data.blockedSlots[d];});
     toast('❌ فشل');
+    renderBlkDaySel();
   }
 }
 window.toggleBlkSlot=toggleBlkSlot;
