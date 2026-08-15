@@ -730,8 +730,29 @@ async function load(){
   }catch(e){syncBar(false);toast('خطأ في الاتصال');}
 }
 async function save(){
+  // قبل الكتابة، نجيب آخر نسخة حجوزات من السيرفر ونضيف أي حجز جديد وصل من الزبائن
+  // ومو موجود بنسختنا المحلية — حتى ما ننمحي حجوزات جديدة بسبب نسخة قديمة بالمتصفح
+  try{
+    const freshSnap=await getDoc(DB);
+    if(freshSnap.exists()){
+      const fr=freshSnap.data();
+      const serverBookings=typeof fr.bookings==='string'?JSON.parse(fr.bookings):(fr.bookings||[]);
+      const localIds=new Set((data.bookings||[]).map(b=>b.id));
+      const missingFromLocal=serverBookings.filter(b=>!localIds.has(b.id));
+      if(missingFromLocal.length){
+        data.bookings=(data.bookings||[]).concat(missingFromLocal);
+      }
+      const serverWaitlist=typeof fr.waitlist==='string'?JSON.parse(fr.waitlist):(fr.waitlist||[]);
+      const localWIds=new Set((data.waitlist||[]).map(w=>w.id));
+      const missingWFromLocal=serverWaitlist.filter(w=>!localWIds.has(w.id));
+      if(missingWFromLocal.length){
+        data.waitlist=(data.waitlist||[]).concat(missingWFromLocal);
+      }
+    }
+  }catch{} // لو فشل الجلب، نكمل بالحفظ بالنسخة المحلية بدل ما نوقف العملية
   await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),customHours:JSON.stringify(data.customHours||{}),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م",heroPhoto:data.heroPhoto||'',monthlyHistory:JSON.stringify(data.monthlyHistory||[]),lastResetMonth:data.lastResetMonth||monthKey(new Date())});
   lastSync=new Date();syncBar(true);
+  render();
 }
 function cleanOld(){
   const t=todayK();
