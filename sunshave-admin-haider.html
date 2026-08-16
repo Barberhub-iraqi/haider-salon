@@ -477,6 +477,13 @@ body{font-family:'Cairo',sans-serif;direction:rtl;background:var(--bg);color:var
         <div class="blk-day-sel" id="blkDaySel"></div>
         <div class="blk-slots-grid" id="blkSlotsGrid"><div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div></div>
         <div id="blkCount" style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px"></div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(239,83,80,0.15)">
+          <div style="font-size:11px;color:#C0392B;font-weight:700;margin-bottom:4px;">🔁 حجب متكرر أسبوعياً</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">اختار يوم من أيام الأسبوع ثم الساعات — تنحجب تلقائياً كل أسبوع بلا ما تدخل يوم يوم</div>
+          <div class="blk-day-sel" id="blkRecDaySel"></div>
+          <div class="blk-slots-grid" id="blkRecSlotsGrid"><div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div></div>
+          <div id="blkRecCount" style="font-size:10px;color:var(--muted);text-align:center;margin-top:4px"></div>
+        </div>
       </div>
       <!-- CUSTOM HOURS PER DAY CARD -->
       <div class="scard" style="border-color:rgba(76,175,145,0.25)">
@@ -577,10 +584,11 @@ document.addEventListener('keydown',e=>{if(document.getElementById('pinScreen').
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, runTransaction, deleteField, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 const _app=initializeApp({apiKey:"AIzaSyCZp9umWTLmTqbllsE-Oi_zFgwwsD4nbVY",authDomain:"sunshave-haider.firebaseapp.com",projectId:"sunshave-haider",storageBucket:"sunshave-haider.firebasestorage.app",messagingSenderId:"1035946760977",appId:"1:1035946760977:web:4693fde0e74e748dd94ab0"});
 const _db=getFirestore(_app);
 const DB=doc(_db,"shams","data");
+const ARCHIVE_DB=doc(_db,"shams","archive");
 const PIN_DOC=doc(_db,"shams","pin");
 const storeRef=doc(_db,"shams","store");
 
@@ -618,7 +626,7 @@ const SH={"12:00 م":12,"1:00 م":13,"2:00 م":14,"3:00 م":15,"4:00 م":16,"5:0
 const DAYS=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 const MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
-let data={bookings:[],waitlist:[],disabledDays:[],blockedSlots:{},customHours:{},archivedBookings:[],expenses:[],workHours:{start:"5:00 م",end:"11:00 م"},services:[
+let data={bookings:[],waitlist:[],disabledDays:[],blockedSlots:{},recurringBlockedSlots:{},customHours:{},archivedBookings:[],expenses:[],workHours:{start:"5:00 م",end:"11:00 م"},services:[
   {id:'svc1',name:'حلاقة كاملة',price:20000,icon:'✂️',duration:60},
   {id:'svc2',name:'تحديد ولحية',price:10000,icon:'🪒',duration:30},
   {id:'svc3',name:'شسوار',price:5000,icon:'💧',duration:15},
@@ -634,7 +642,7 @@ function dl(d){return`${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}
 function fp(p){return Number(p).toLocaleString('ar-IQ')+' د.ع';}
 function next7(){const r=[];const t=new Date();t.setHours(0,0,0,0);for(let i=0;i<7;i++){const d=new Date(t);d.setDate(t.getDate()+i);r.push(d);}return r;}
 function todayK(){return dk(new Date());}
-function normPhone(p){const c=p.replace(/\D/g,'');return c.startsWith('964')?'0'+c.slice(3):c;}
+function normPhone(p){let c=p.replace(/\D/g,'');if(c.startsWith('00964'))c='0'+c.slice(5);else if(c.startsWith('964'))c='0'+c.slice(3);return c;}
 function wh(dateKey){if(dateKey&&data.customHours&&data.customHours[dateKey])return data.customHours[dateKey];return data.workHours||{start:"5:00 م",end:"11:00 م"};}
 function slots(dateKey){const w=wh(dateKey);const si=ALL_SLOTS.indexOf(w.start);const ei=ALL_SLOTS.indexOf(w.end);if(si<0||ei<0)return["5:00 م","6:00 م","7:00 م","8:00 م","9:00 م","10:00 م","11:00 م"];return ei>=si?ALL_SLOTS.slice(si,ei+1):[...ALL_SLOTS.slice(si),...ALL_SLOTS.slice(0,ei+1)];}
 // هل هذا الوقت يقع بعد منتصف الليل (يتبع اليوم التالي) بناءً على أوقات دوام هذا اليوم تحديداً
@@ -691,6 +699,7 @@ function monthLabel(k){const[y,m]=k.split('-');return`${MONTHS[parseInt(m)-1]} $
 async function load(){
   try{
     const snap=await getDoc(DB);
+    let legacyArchived=null,legacyExpenses=null;
     if(snap.exists()){const r=snap.data();
       const defaultSvcs=[
         {id:'svc1',name:'حلاقة كاملة',price:20000,icon:'✂️',duration:60},
@@ -706,9 +715,10 @@ async function load(){
         waitlist:typeof r.waitlist==='string'?JSON.parse(r.waitlist):(r.waitlist||[]),
         disabledDays:typeof r.disabledDays==='string'?JSON.parse(r.disabledDays):(r.disabledDays||[]),
         blockedSlots:typeof r.blockedSlots==='string'?JSON.parse(r.blockedSlots):(r.blockedSlots||{}),
+        recurringBlockedSlots:typeof r.recurringBlockedSlots==='string'?JSON.parse(r.recurringBlockedSlots):(r.recurringBlockedSlots||{}),
         customHours:typeof r.customHours==='string'?JSON.parse(r.customHours):(r.customHours||{}),
-        archivedBookings:typeof r.archivedBookings==='string'?JSON.parse(r.archivedBookings):(r.archivedBookings||[]),
-        expenses:typeof r.expenses==='string'?JSON.parse(r.expenses):(r.expenses||[]),
+        archivedBookings:[],
+        expenses:[],
         workHours:{start:r.workHoursStart||"5:00 م",end:r.workHoursEnd||"11:00 م"},
         services:typeof r.services==='string'?JSON.parse(r.services):(r.services||defaultSvcs),
         heroPhoto:r.heroPhoto||'',
@@ -722,39 +732,86 @@ async function load(){
       // ترقية تلقائية: أضف duration للخدمات اللي ما عندها مدة محددة
       const durMap={'svc1':60,'svc2':30,'svc3':15,'svc4':15,'svc5':45,'svc6':30,'svc7':30};
       data.services.forEach(s=>{if(!s.duration)s.duration=durMap[s.id]||60;});
+      // ترحيل بيانات قديمة: لو الوثيقة الرئيسية لسا فيها أرشيف/مصاريف من النسخة القديمة
+      // (قبل الفصل)، نلتقطها هنا مرة وحدة عشان ننقلها للوثيقة المنفصلة تحت.
+      if(r.archivedBookings!==undefined)legacyArchived=typeof r.archivedBookings==='string'?JSON.parse(r.archivedBookings):(r.archivedBookings||[]);
+      if(r.expenses!==undefined)legacyExpenses=typeof r.expenses==='string'?JSON.parse(r.expenses):(r.expenses||[]);
     }
-    cleanOld();
+    // الأرشيف والمصاريف الآن بوثيقة مستقلة خفيفة — نقرأها هنا لأن صفحة الإدارة تعرضها
+    // بتبويب التقارير، لكنها لا تُحمَّل أبداً من صفحة الزبون ولا تُرفع مع كل عملية يومية.
+    try{
+      const asnap=await getDoc(ARCHIVE_DB);
+      if(asnap.exists()){
+        const ar=asnap.data();
+        data.archivedBookings=typeof ar.archivedBookings==='string'?JSON.parse(ar.archivedBookings):(ar.archivedBookings||[]);
+        data.expenses=typeof ar.expenses==='string'?JSON.parse(ar.expenses):(ar.expenses||[]);
+      }
+    }catch{}
+    if(legacyArchived||legacyExpenses){
+      // ندمج القديم مع الجديد (بدون تكرار حسب id) ونحفظ بالوثيقة الجديدة، وبعدين نمسحه
+      // نهائياً من الوثيقة الرئيسية عشان ما يضل يترفع مع كل تحميل لصفحة الزبون بعد اليوم.
+      if(legacyArchived&&legacyArchived.length){
+        const known=new Set(data.archivedBookings.map(b=>b.id));
+        data.archivedBookings=[...data.archivedBookings,...legacyArchived.filter(b=>!known.has(b.id))];
+      }
+      if(legacyExpenses&&legacyExpenses.length){
+        const known=new Set(data.expenses.map(e=>e.id));
+        data.expenses=[...data.expenses,...legacyExpenses.filter(e=>!known.has(e.id))];
+      }
+      await saveArchive();
+      try{await setDoc(DB,{archivedBookings:deleteField(),expenses:deleteField()},{merge:true});}catch{}
+    }
+    await cleanOld();
+    if(materializeRecurringBlocks())await save();
     const resetHappened=monthlyReset();
     lastSync=new Date();syncBar(true);
-    if(resetHappened){try{await save();}catch{}}
+    if(resetHappened){try{await save();await saveArchive();}catch{}}
   }catch(e){syncBar(false);toast('خطأ في الاتصال');}
 }
-async function save(){
-  // قبل الكتابة، نجيب آخر نسخة حجوزات من السيرفر ونضيف أي حجز جديد وصل من الزبائن
-  // ومو موجود بنسختنا المحلية — حتى ما ننمحي حجوزات جديدة بسبب نسخة قديمة بالمتصفح
-  try{
-    const freshSnap=await getDoc(DB);
-    if(freshSnap.exists()){
-      const fr=freshSnap.data();
-      const serverBookings=typeof fr.bookings==='string'?JSON.parse(fr.bookings):(fr.bookings||[]);
-      const localIds=new Set((data.bookings||[]).map(b=>b.id));
-      const missingFromLocal=serverBookings.filter(b=>!localIds.has(b.id));
-      if(missingFromLocal.length){
-        data.bookings=(data.bookings||[]).concat(missingFromLocal);
-      }
-      const serverWaitlist=typeof fr.waitlist==='string'?JSON.parse(fr.waitlist):(fr.waitlist||[]);
-      const localWIds=new Set((data.waitlist||[]).map(w=>w.id));
-      const missingWFromLocal=serverWaitlist.filter(w=>!localWIds.has(w.id));
-      if(missingWFromLocal.length){
-        data.waitlist=(data.waitlist||[]).concat(missingWFromLocal);
-      }
+// حفظ الحجوزات والإعدادات اليومية — بعملية ذرية (transaction) تقرأ أحدث نسخة من السيرفر
+// أول، وتدمج معها أي تعديل محلي، فما ينمحي أي حجز جديد وصل من زبون بنفس اللحظة.
+// removedIds: أي معرفات حجز/انتظار حذفناها بهذا الاستدعاء (إلغاء، تخصيص كخدمة تمت، إلخ)
+async function save(removedIds){
+  const removedSet=new Set(removedIds||[]);
+  const localBookings=data.bookings||[];
+  const localWaitlist=data.waitlist||[];
+  const localMap=new Map(localBookings.map(b=>[b.id,b]));
+  const localWMap=new Map(localWaitlist.map(w=>[w.id,w]));
+  await runTransaction(_db,async(transaction)=>{
+    const snap=await transaction.get(DB);
+    let serverBookings=[],serverWaitlist=[];
+    if(snap.exists()){
+      const r=snap.data();
+      serverBookings=typeof r.bookings==='string'?JSON.parse(r.bookings):(r.bookings||[]);
+      serverWaitlist=typeof r.waitlist==='string'?JSON.parse(r.waitlist):(r.waitlist||[]);
     }
-  }catch{} // لو فشل الجلب، نكمل بالحفظ بالنسخة المحلية بدل ما نوقف العملية
-  await setDoc(DB,{bookings:JSON.stringify(data.bookings||[]),waitlist:JSON.stringify(data.waitlist||[]),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),customHours:JSON.stringify(data.customHours||{}),archivedBookings:JSON.stringify(data.archivedBookings||[]),expenses:JSON.stringify(data.expenses||[]),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م",heroPhoto:data.heroPhoto||'',monthlyHistory:JSON.stringify(data.monthlyHistory||[]),lastResetMonth:data.lastResetMonth||monthKey(new Date())});
+    // نبدا من نسخة السيرفر (تحتوي أي حجز وصل من زبون بنفس اللحظة)، نطبق حذوفاتنا المحلية،
+    // ونحدّث بأي تعديل محلي (ملاحظة، تذكير...)، وأخيراً نضيف أي حجز محلي جديد مو بالسيرفر بعد
+    const mergedBookings=serverBookings.filter(b=>!removedSet.has(b.id)).map(b=>localMap.get(b.id)||b);
+    const knownIds=new Set(mergedBookings.map(b=>b.id));
+    const localOnlyNew=localBookings.filter(b=>!knownIds.has(b.id)&&!removedSet.has(b.id));
+    const finalBookings=[...mergedBookings,...localOnlyNew];
+    const mergedWaitlist=serverWaitlist.filter(w=>!removedSet.has(w.id)).map(w=>localWMap.get(w.id)||w);
+    const knownWIds=new Set(mergedWaitlist.map(w=>w.id));
+    const localOnlyNewW=localWaitlist.filter(w=>!knownWIds.has(w.id)&&!removedSet.has(w.id));
+    const finalWaitlist=[...mergedWaitlist,...localOnlyNewW];
+    // ملاحظة أداء: ما نبعث archivedBookings/expenses هنا بعد الآن — صارت بوثيقة مستقلة
+    // (ARCHIVE_DB) تُحفظ عبر saveArchive() فقط لما تتغير فعلاً. هذا يخلي كل عملية يومية
+    // (إلغاء، ملاحظة، إعدادات) سريعة وما تكبر مع الوقت.
+    transaction.set(DB,{bookings:JSON.stringify(finalBookings),waitlist:JSON.stringify(finalWaitlist),disabledDays:JSON.stringify(data.disabledDays||[]),blockedSlots:JSON.stringify(data.blockedSlots||{}),recurringBlockedSlots:JSON.stringify(data.recurringBlockedSlots||{}),customHours:JSON.stringify(data.customHours||{}),services:JSON.stringify(data.services||[]),workHoursStart:(data.workHours&&data.workHours.start)||"5:00 م",workHoursEnd:(data.workHours&&data.workHours.end)||"11:00 م",heroPhoto:data.heroPhoto||'',monthlyHistory:JSON.stringify(data.monthlyHistory||[]),lastResetMonth:data.lastResetMonth||monthKey(new Date())},{merge:true});
+    data.bookings=finalBookings;
+    data.waitlist=finalWaitlist;
+  });
   lastSync=new Date();syncBar(true);
-  render();
 }
-function cleanOld(){
+// حفظ الأرشيف والمصاريف بوثيقتهم المستقلة فقط — لا تلمس حجوزات اليوم، فتصير خفيفة وسريعة
+async function saveArchive(){
+  await setDoc(ARCHIVE_DB,{
+    archivedBookings:JSON.stringify(data.archivedBookings||[]),
+    expenses:JSON.stringify(data.expenses||[])
+  },{merge:true});
+}
+async function cleanOld(){
   const t=todayK();
   const toRemove=data.bookings.filter(b=>{
     if(!b.dateKey)return true;
@@ -766,8 +823,11 @@ function cleanOld(){
     if(!data.archivedBookings)data.archivedBookings=[];
     toRemove.forEach(b=>{if(!data.archivedBookings.find(a=>a.id===b.id))data.archivedBookings.push({...b,autoArchived:true,completedAt:b.completedAt||Date.now()});});
     data.bookings=data.bookings.filter(b=>!toRemove.find(r=>r.id===b.id));
+    try{await saveArchive();}catch{}
+    // لازم نحذفهم فعلياً من وثيقة الحجوزات بالسيرفر مو بس محلياً — وإلا أي عملية حفظ جاية
+    // (إلغاء، ملاحظة، حجز يدوي...) بترجعهم من نسخة السيرفر القديمة، فيطلعون ويختفون بالتكرار
+    try{await save(toRemove.map(b=>b.id));}catch{}
   }
-  return toRemove.length>0;
 }
 // تصفير الأرشيف والحسابات (الصرفيات) تلقائياً أول كل شهر — بعد حفظ ملخص الشهر المنتهي في سجل الإيرادات
 function monthlyReset(){
@@ -861,9 +921,9 @@ async function remind(id){
   try{await save();render();toast(`✅ تأكيد لـ ${b.name}`);}
   catch(e){b.reminded=false;toast('❌ فشل');}
 }
-async function cancelB(id){if(!confirm('إلغاء هذا الحجز؟'))return;const b=data.bookings.find(x=>x.id===id);if(!b)return;const waWin=window.open('','_blank');const bk=[...data.bookings];data.bookings=data.bookings.filter(x=>x.id!==id);try{await save();render();toast(`🗑️ ألغي موعد ${b.name}`);const msg=`مرحبا ${b.name} 👋\n\n❌ نأسف، تم إلغاء حجزكم في صالون شمس\n✂️ ${b.service}\n📅 ${b.dateLabel||b.day}\n⏰ ${b.slot}\n\nيمكنكم إعادة الحجز بوقت آخر يناسبكم 🙏`;openWA(b.phone,msg,waWin);}catch{data.bookings=bk;toast('❌ فشل');if(waWin&&!waWin.closed)waWin.close();}}
-async function cancelLate(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const m=lateMin(b);const waWin=window.open('','_blank');const bk=[...data.bookings];data.bookings=data.bookings.filter(x=>x.id!==id);try{await save();render();toast(`⛔ ألغي حجز ${b.name} — تأخر ${m} دقيقة`);const msg=`مرحبا ${b.name} 👋\n\n❌ تم إلغاء حجزكم في صالون شمس بسبب التأخر أكثر من 15 دقيقة عن الموعد\n✂️ ${b.service}\n⏰ ${b.slot}\n\nنعتذر منكم، يمكنكم إعادة الحجز بوقت آخر 🙏`;openWA(b.phone,msg,waWin);}catch{data.bookings=bk;toast('❌ فشل');if(waWin&&!waWin.closed)waWin.close();}}
-async function markDone(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;if(!confirm(`تأكيد انتهاء خدمة ${b.name}؟`))return;data.bookings=data.bookings.filter(x=>x.id!==id);if(!data.archivedBookings)data.archivedBookings=[];data.archivedBookings.push({...b,completedAt:Date.now(),status:'done'});try{await save();render();toast(`✅ تمت خدمة ${b.name}`);}catch{data.bookings.push(b);data.archivedBookings.pop();toast('❌ فشل');}}
+async function cancelB(id){if(!confirm('إلغاء هذا الحجز؟'))return;const b=data.bookings.find(x=>x.id===id);if(!b)return;const waWin=window.open('','_blank');const bk=[...data.bookings];data.bookings=data.bookings.filter(x=>x.id!==id);try{await save([id]);render();toast(`🗑️ ألغي موعد ${b.name}`);const msg=`مرحبا ${b.name} 👋\n\n❌ نأسف، تم إلغاء حجزكم في صالون شمس\n✂️ ${b.service}\n📅 ${b.dateLabel||b.day}\n⏰ ${b.slot}\n\nيمكنكم إعادة الحجز بوقت آخر يناسبكم 🙏`;openWA(b.phone,msg,waWin);}catch{data.bookings=bk;toast('❌ فشل');if(waWin&&!waWin.closed)waWin.close();}}
+async function cancelLate(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const m=lateMin(b);const waWin=window.open('','_blank');const bk=[...data.bookings];data.bookings=data.bookings.filter(x=>x.id!==id);try{await save([id]);render();toast(`⛔ ألغي حجز ${b.name} — تأخر ${m} دقيقة`);const msg=`مرحبا ${b.name} 👋\n\n❌ تم إلغاء حجزكم في صالون شمس بسبب التأخر أكثر من 15 دقيقة عن الموعد\n✂️ ${b.service}\n⏰ ${b.slot}\n\nنعتذر منكم، يمكنكم إعادة الحجز بوقت آخر 🙏`;openWA(b.phone,msg,waWin);}catch{data.bookings=bk;toast('❌ فشل');if(waWin&&!waWin.closed)waWin.close();}}
+async function markDone(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;if(!confirm(`تأكيد انتهاء خدمة ${b.name}؟`))return;data.bookings=data.bookings.filter(x=>x.id!==id);if(!data.archivedBookings)data.archivedBookings=[];data.archivedBookings.push({...b,completedAt:Date.now(),status:'done'});try{await save([id]);await saveArchive();render();toast(`✅ تمت خدمة ${b.name}`);}catch{data.bookings.push(b);data.archivedBookings.pop();toast('❌ فشل');}}
 async function saveNote(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const inp=document.getElementById('note_'+id);if(!inp)return;b.note=inp.value.trim();await save();toast('💾 تم حفظ الملاحظة');}
 function sendWait(id){const b=data.bookings.find(x=>x.id===id);if(!b)return;const w=waitInfo(id);if(!w){toast('هذا الحجز مو اليوم');return;}const msg=w.before===0?`السلام عليكم ${b.name} 👋\n\n✂️ دورك الآن في Sun Shave!\n\nتفضل مباشرة ☀️`:`السلام عليكم ${b.name} 👋\n\n⏳ وقت انتظارك التقديري:\n👤 في قبلك: ${w.before} زبون\n⏱️ ~${w.mins} دقيقة\n\nSun Shave ☀️`;openWA(b.phone,msg);toast(`📲 أُرسل لـ ${b.name}`);}
 async function clearAll(){
@@ -875,7 +935,7 @@ async function clearAll(){
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
   a.href=url;a.download=`sunshave_backup_${todayK()}.json`;a.click();URL.revokeObjectURL(url);
   const bk=[...data.bookings];data.bookings=[];
-  try{await save();render();toast('✅ تم المسح + تحميل نسخة احتياطية');}
+  try{await save(bk.map(b=>b.id));render();toast('✅ تم المسح + تحميل نسخة احتياطية');}
   catch{data.bookings=bk;toast('❌ فشل');}
 }
 
@@ -913,9 +973,9 @@ function addExp(){
   const n=document.getElementById('expN').value.trim();const a=parseInt(document.getElementById('expA').value)||0;const m=document.getElementById('expM').value;
   if(!n){toast('أدخل اسم الصرفية');return;}if(!a){toast('أدخل المبلغ');return;}
   if(!data.expenses)data.expenses=[];data.expenses.push({id:'e'+Date.now(),name:n,amount:a,month:m,createdAt:Date.now()});
-  save().then(()=>{document.getElementById('expN').value='';document.getElementById('expA').value='';renderAcc();toast('✅ تمت الإضافة');}).catch(()=>{data.expenses.pop();toast('❌ فشل');});
+  saveArchive().then(()=>{document.getElementById('expN').value='';document.getElementById('expA').value='';renderAcc();toast('✅ تمت الإضافة');}).catch(()=>{data.expenses.pop();toast('❌ فشل');});
 }
-function delExp(id){if(!confirm('حذف؟'))return;const idx=data.expenses.findIndex(e=>e.id===id);if(idx<0)return;const rm=data.expenses.splice(idx,1)[0];save().then(()=>renderAcc()).catch(()=>{data.expenses.splice(idx,0,rm);});}
+function delExp(id){if(!confirm('حذف؟'))return;const idx=data.expenses.findIndex(e=>e.id===id);if(idx<0)return;const rm=data.expenses.splice(idx,1)[0];saveArchive().then(()=>renderAcc()).catch(()=>{data.expenses.splice(idx,0,rm);});}
 function renderAcc(){
   if(!data.expenses)data.expenses=[];popMonthSels();
   const fm=document.getElementById('fltM')?.value||monthKey(new Date());const cm=monthKey(new Date());
@@ -945,7 +1005,7 @@ function renderWaitlist(){
   const list=document.getElementById('waitCards');if(!data.waitlist||!data.waitlist.length){list.innerHTML=`<div class="empty"><div class="empty-icon">⏳</div><p>القائمة فارغة</p></div>`;return;}
   list.innerHTML=data.waitlist.map(w=>`<div class="wait-card"><div><div class="wait-name">${w.name}</div><div class="wait-detail">📞 ${w.phone} • 📅 ${w.day}</div></div><button class="notif-btn" onclick="notifyWait('${w.id}')">📲 أبلغه</button></div>`).join('');
 }
-async function notifyWait(id){const w=data.waitlist.find(x=>x.id===id);if(!w)return;const msg=`السلام عليكم ${w.name} 👋\n\n🎉 تفرغ وقت في Sun Shave ليوم ${w.day}!\n\nاحجز الآن ☀️`;openWA(w.phone,msg);data.waitlist=data.waitlist.filter(x=>x.id!==id);try{await save();renderWaitlist();toast(`✅ تم إبلاغ ${w.name}`);}catch{data.waitlist.push(w);}}
+async function notifyWait(id){const w=data.waitlist.find(x=>x.id===id);if(!w)return;const msg=`السلام عليكم ${w.name} 👋\n\n🎉 تفرغ وقت في Sun Shave ليوم ${w.day}!\n\nاحجز الآن ☀️`;openWA(w.phone,msg);data.waitlist=data.waitlist.filter(x=>x.id!==id);try{await save([id]);renderWaitlist();toast(`✅ تم إبلاغ ${w.name}`);}catch{data.waitlist.push(w);}}
 
 function renderSettings(){
   // Render shop background preview
@@ -997,6 +1057,7 @@ function renderSettings(){
   next7().forEach(d=>{const key=dk(d);const off=(data.disabledDays||[]).includes(key);const card=document.createElement('div');card.className='dis-day'+(off?' off':'');card.innerHTML=`<span class="dd-name">${DAYS[d.getDay()]}</span><span class="dd-num">${d.getDate()}</span><span class="dd-month">${MONTHS[d.getMonth()]}</span>`;card.onclick=()=>toggleDay(key);g.appendChild(card);});
   // render blocked slots day selector
   renderBlkDaySel();
+  renderBlkRecDaySel();
   // render custom hours per day selector
   renderChDaySel();
 }
@@ -1273,6 +1334,86 @@ async function toggleBlkSlot(dateKey,slot){
   }
 }
 window.toggleBlkSlot=toggleBlkSlot;
+
+// ── Recurring Weekly Blocked Slots ──
+let blkRecSelDay=null;
+function renderBlkRecDaySel(){
+  const g=document.getElementById('blkRecDaySel');if(!g)return;
+  g.innerHTML='';
+  DAYS.forEach((name,idx)=>{
+    const btn=document.createElement('button');
+    btn.className='blk-day-pill'+(blkRecSelDay===idx?' active':'');
+    const cnt=((data.recurringBlockedSlots||{})[idx]||[]).length;
+    btn.textContent=name+(cnt?` (${cnt}🚫)`:'');
+    btn.onclick=()=>{blkRecSelDay=idx;renderBlkRecDaySel();renderBlkRecSlots();};
+    g.appendChild(btn);
+  });
+  renderBlkRecSlots();
+}
+function renderBlkRecSlots(){
+  const g=document.getElementById('blkRecSlotsGrid');if(!g)return;
+  if(blkRecSelDay===null){g.innerHTML='<div style="color:var(--muted);font-size:11px;text-align:center;padding:10px;grid-column:span 4">اختار يوماً أولاً</div>';return;}
+  const workSlots=slots();
+  const blocked=(data.recurringBlockedSlots||{})[blkRecSelDay]||[];
+  g.innerHTML='';
+  workSlots.forEach(s=>{
+    const isBlocked=blocked.includes(s);
+    const btn=document.createElement('button');
+    btn.className='blk-slot'+(isBlocked?' blocked':'');
+    btn.textContent=s;
+    btn.onclick=()=>toggleBlkRecSlot(blkRecSelDay,s);
+    g.appendChild(btn);
+  });
+  const cnt=blocked.length;
+  const countEl=document.getElementById('blkRecCount');
+  if(countEl)countEl.textContent=cnt?`🚫 ${cnt} ساعة تنحجب كل ${DAYS[blkRecSelDay]}`:'✅ ما فيه ساعات محجوبة بشكل متكرر لهذا اليوم';
+}
+async function toggleBlkRecSlot(dayIdx,slot){
+  if(!data.recurringBlockedSlots)data.recurringBlockedSlots={};
+  if(!data.recurringBlockedSlots[dayIdx])data.recurringBlockedSlots[dayIdx]=[];
+  const arr=data.recurringBlockedSlots[dayIdx];
+  const idx=arr.indexOf(slot);
+  const wasBlocked=idx>=0;
+  if(wasBlocked)arr.splice(idx,1);else arr.push(slot);
+  if(!arr.length)delete data.recurringBlockedSlots[dayIdx];
+  if(wasBlocked)removeRecurringSlotFromFuture(dayIdx,slot);else materializeRecurringBlocks();
+  renderBlkRecDaySel();renderBlkDaySel();toast(wasBlocked?`✅ أُلغي التكرار لوقت ${slot}`:`🔁 راح يتحجب وقت ${slot} كل ${DAYS[dayIdx]}`);
+  try{await save();}
+  catch{toast('❌ فشل الحفظ');}
+}
+window.toggleBlkRecSlot=toggleBlkRecSlot;
+// يطبّق قواعد الحجب المتكرر على التواريخ الفعلية (٩٠ يوم قدام) — يرجّع true اذا صار تغيير
+function materializeRecurringBlocks(){
+  const rules=data.recurringBlockedSlots||{};
+  if(!Object.keys(rules).length)return false;
+  if(!data.blockedSlots)data.blockedSlots={};
+  let changed=false;
+  const t=new Date();t.setHours(0,0,0,0);
+  for(let i=0;i<90;i++){
+    const d=new Date(t);d.setDate(t.getDate()+i);
+    const wd=d.getDay();
+    const daySlots=rules[wd];
+    if(!daySlots||!daySlots.length)continue;
+    const key=dk(d);
+    if(!data.blockedSlots[key])data.blockedSlots[key]=[];
+    daySlots.forEach(s=>{if(!data.blockedSlots[key].includes(s)){data.blockedSlots[key].push(s);changed=true;}});
+  }
+  return changed;
+}
+// يشيل ساعة متكررة من كل التواريخ القادمة اللي تطابق نفس يوم الأسبوع
+function removeRecurringSlotFromFuture(dayIdx,slot){
+  if(!data.blockedSlots)return;
+  const t=new Date();t.setHours(0,0,0,0);
+  for(let i=0;i<90;i++){
+    const d=new Date(t);d.setDate(t.getDate()+i);
+    if(d.getDay()!==dayIdx)continue;
+    const key=dk(d);
+    if(data.blockedSlots[key]){
+      data.blockedSlots[key]=data.blockedSlots[key].filter(s=>s!==slot);
+      if(!data.blockedSlots[key].length)delete data.blockedSlots[key];
+    }
+  }
+}
 
 // ── Custom Hours Per Day ──
 let chSelDay=null;
@@ -1621,12 +1762,38 @@ function render(){
   else if(activeTab==='settings')renderSettings();
 }
 
+// تحديث فوري: أي تغيير بوثيقة الحجوزات بفايربيس (حجز جديد من زبون، إلغاء، إلخ) يوصل
+// مباشرة بدون انتظار — بدل الاعتماد بس على فحص كل فترة. ما تلمس وثيقة الأرشيف (نادرة التغيّر).
+function attachRealtimeListener(){
+  if(window._bookingListener)return;
+  window._bookingListener=onSnapshot(DB,(snap)=>{
+    if(!snap.exists())return;
+    try{
+      const r=snap.data();
+      data.bookings=typeof r.bookings==='string'?JSON.parse(r.bookings):(r.bookings||data.bookings||[]);
+      data.waitlist=typeof r.waitlist==='string'?JSON.parse(r.waitlist):(r.waitlist||data.waitlist||[]);
+      data.disabledDays=typeof r.disabledDays==='string'?JSON.parse(r.disabledDays):(r.disabledDays||data.disabledDays||[]);
+      data.blockedSlots=typeof r.blockedSlots==='string'?JSON.parse(r.blockedSlots):(r.blockedSlots||data.blockedSlots||{});
+      data.recurringBlockedSlots=typeof r.recurringBlockedSlots==='string'?JSON.parse(r.recurringBlockedSlots):(r.recurringBlockedSlots||data.recurringBlockedSlots||{});
+      data.customHours=typeof r.customHours==='string'?JSON.parse(r.customHours):(r.customHours||data.customHours||{});
+      data.services=typeof r.services==='string'?JSON.parse(r.services):(r.services||data.services||[]);
+      data.workHours={start:r.workHoursStart||data.workHours.start,end:r.workHoursEnd||data.workHours.end};
+      data.heroPhoto=r.heroPhoto||data.heroPhoto||'';
+      lastSync=new Date();syncBar(true);
+      // ما نلمس تبويبي الإعدادات/المتجر أثناء التعديل فيهم حتى ما نقاطع الأدمن وهو يكتب
+      if(activeTab!=='settings'&&activeTab!=='store'){render();checkNew();}
+      updateManualSvcSelect();
+    }catch(e){console.error('Realtime parse error:',e);}
+  },(e)=>{console.error('Realtime error:',e);syncBar(false);});
+}
 async function init(){
   try{await loadAndRender();}catch(e){console.error('Firebase error:',e);render();}
   updateManualSvcSelect();
   document.getElementById('loaderApp').style.display='none';
   document.getElementById('mainApp').style.display='block';
-  setInterval(async()=>{if(activeTab==='settings'||activeTab==='store')return;try{await load();render();checkNew();updateManualSvcSelect();}catch{}},10000);
+  attachRealtimeListener();
+  // فحص احتياطي كل 30 ثانية فقط كشبكة أمان لو صار انقطاع مؤقت بالـ realtime
+  setInterval(async()=>{if(activeTab==='settings'||activeTab==='store')return;try{await load();render();checkNew();updateManualSvcSelect();}catch{}},30000);
 }
 window._init=init;
 
